@@ -63,7 +63,7 @@ class ConfigStore(ctx: Context) {
 
     /**
      * Board tab visibility: "chores" / "lists" / "meals" default on; "routines"
-     * is opt-in (default false) so it stays hidden until a family turns it on.
+     * and "potty" are opt-in (default false) so they stay hidden until a family turns them on.
      */
     fun featureEnabled(key: String, default: Boolean = true): Boolean =
         prefs.getBoolean("feature_$key", default)
@@ -72,11 +72,57 @@ class ConfigStore(ctx: Context) {
         prefs.edit().putBoolean("feature_$key", on).commit()
     }
 
+    /** Raw on/off for every tab in [Rules.TAB_KEYS] order; opt-in tabs default off. */
+    fun tabFlags(): List<Boolean> = Rules.TAB_KEYS.map {
+        featureEnabled(it, default = it in setOf("calendar", "chores", "lists", "meals"))
+    }
+
+    /** Voice commands are completely off (no mic button, no recording, no model) until a parent turns them on. */
+    fun voiceEnabled(): Boolean = prefs.getBoolean("voice_enabled", false)
+
+    fun setVoiceEnabled(on: Boolean) {
+        prefs.edit().putBoolean("voice_enabled", on).commit()
+    }
+
+    /** "offline" (Vosk, on-device, default) or "gemini" (sends audio to Google, needs a key). */
+    fun voiceEngine(): String = prefs.getString("voice_engine", "offline") ?: "offline"
+
+    fun setVoiceEngine(engine: String) {
+        if (engine != "offline" && engine != "gemini") throw IllegalArgumentException("engine must be offline or gemini")
+        prefs.edit().putString("voice_engine", engine).commit()
+    }
+
+    /** Tab the board opens on (and returns to after idle). Never "shopping": it is PIN-locked. */
+    fun defaultTab(): String = prefs.getString("default_tab", "calendar") ?: "calendar"
+
+    fun setDefaultTab(key: String) {
+        if (key !in Rules.TAB_KEYS || key == "shopping")
+            throw IllegalArgumentException("pick one of the open tabs")
+        prefs.edit().putString("default_tab", key).commit()
+    }
+
+    /** Members who use the potty tracker. Nobody until a parent picks them. */
+    fun pottyKids(): Set<String> = prefs.getString("potty_kids", null)?.let { raw ->
+        val a = JSONArray(raw)
+        (0 until a.length()).map { a.getString(it) }.toSet()
+    } ?: emptySet()
+
+    fun setPottyKids(ids: Collection<String>) {
+        prefs.edit().putString("potty_kids", JSONArray(ids.toList()).toString()).commit()
+    }
+
     /** Celebration animations when a chore is checked off (on by default). */
     fun choreEffects(): Boolean = prefs.getBoolean("chore_effects", true)
 
     fun setChoreEffects(on: Boolean) {
         prefs.edit().putBoolean("chore_effects", on).commit()
+    }
+
+    /** Secret the phone presents to the config server; created once, never exported. */
+    @Synchronized
+    fun serverToken(): String = prefs.getString("server_token", null) ?: run {
+        val bytes = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
+        bytes.joinToString("") { "%02x".format(it) }.also { prefs.edit().putString("server_token", it).commit() }
     }
 
     /** Kid-lock PIN; empty = lock disabled. Gates edits on the board only. */

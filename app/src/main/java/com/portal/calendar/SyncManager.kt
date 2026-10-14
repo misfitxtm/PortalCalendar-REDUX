@@ -7,7 +7,6 @@ import biweekly.Biweekly
 import biweekly.component.VEvent
 import java.io.File
 import java.net.HttpURLConnection
-import java.net.URL
 import java.security.MessageDigest
 import java.util.Date
 import java.util.TimeZone
@@ -62,15 +61,15 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
         try {
             val url = if (feed.url.startsWith("webcal://"))
                 "https://" + feed.url.removePrefix("webcal://") else feed.url
-            val conn = URL(url).openConnection() as HttpURLConnection
-            conn.connectTimeout = 10_000
-            conn.readTimeout = 20_000
-            conn.instanceFollowRedirects = true
-            conn.setRequestProperty("User-Agent", "PortalFamilyCalendar/1.0")
+            val conn = UrlGuard.open(url) {
+                it.connectTimeout = 10_000
+                it.readTimeout = 20_000
+                it.setRequestProperty("User-Agent", "PortalFamilyCalendar/1.0")
+            }
             try {
                 if (conn.responseCode !in 200..299)
                     throw RuntimeException("HTTP ${conn.responseCode}")
-                val text = conn.inputStream.bufferedReader().readText()
+                val text = UrlGuard.readCapped(conn.inputStream)
                 if (!text.contains("BEGIN:VCALENDAR"))
                     throw RuntimeException("not an iCal feed")
                 // Atomic: a crash mid-write must not corrupt the offline copy.
@@ -183,16 +182,16 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
         val url = if (rawUrl.startsWith("webcal://"))
             "https://" + rawUrl.removePrefix("webcal://") else rawUrl
         try {
-            val conn = URL(url).openConnection() as HttpURLConnection
-            conn.connectTimeout = 10_000
-            conn.readTimeout = 20_000
-            conn.instanceFollowRedirects = true
-            conn.setRequestProperty("User-Agent", "PortalFamilyCalendar/1.0")
+            val conn = UrlGuard.open(url) {
+                it.connectTimeout = 10_000
+                it.readTimeout = 20_000
+                it.setRequestProperty("User-Agent", "PortalFamilyCalendar/1.0")
+            }
             try {
                 if (conn.responseCode !in 200..299)
                     throw IllegalArgumentException(
                         "the server said HTTP ${conn.responseCode} — check the link is the iCal/secret address")
-                val text = conn.inputStream.bufferedReader().readText()
+                val text = UrlGuard.readCapped(conn.inputStream)
                 if (!text.contains("BEGIN:VCALENDAR"))
                     throw IllegalArgumentException(
                         "that link isn't a calendar feed — it should end in .ics or start with webcal://")

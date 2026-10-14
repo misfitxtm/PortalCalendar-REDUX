@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Family Calendar</title>
+<title>PortalHub REDUX</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#f0584c">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -101,7 +101,7 @@
     <div class="wiz-nav" id="wizNav"></div>
   </div>
 
-  <h1>Family Calendar</h1>
+  <h1>PortalHub REDUX</h1>
   <div class="sub">Your family hub, served straight from the Portal</div>
 
   <div id="tabbar" style="display:flex;gap:8px;margin-bottom:16px;">
@@ -115,8 +115,34 @@
   </div>
 
   <div class="card" data-tab="chores">
-    <strong>Stars this week</strong>
+    <strong>Points this week</strong>
+    <div style="font-size:13px;color:#737983;margin-top:4px;">Resets every Friday. Add a bonus or take points away; the reason is optional.</div>
+    <input type="text" id="ptReason" placeholder="Reason, e.g. Great job / Got in trouble" maxlength="60" autocomplete="off" style="margin:8px 0 0;">
     <div id="starBox" style="margin-top:8px;"></div>
+    <div id="ptHistory"></div>
+  </div>
+
+  <div class="card" data-tab="chores">
+    <strong>Starter chores</strong>
+    <div style="font-size:13px;color:#737983;margin:6px 0 10px;">Everyday household tasks. Untick any you don't want. People who already have a chore are skipped. Hygiene like teeth and showers belongs in Routines.</div>
+    <div id="starterBox"></div>
+    <div id="starterMembers" style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0;"></div>
+    <button style="width:100%;" onclick="addStarter()">Add starter chores to the selected people</button>
+  </div>
+
+  <div class="card" data-tab="chores">
+    <strong>🎁 Rewards</strong>
+    <div style="font-size:13px;color:#737983;margin:6px 0 10px;">Prizes the kids can spend this week's points on. Spending takes points off and they reset every Friday, so unspent points don't carry over. Spend from here or from the points badge on the board (parent PIN).</div>
+    <div id="rewardBox"></div>
+    <div class="row2" style="margin-top:10px;">
+      <input type="text" id="rwIcon" value="🎁" maxlength="4" style="margin:0;flex:none;width:64px;text-align:center;">
+      <input type="text" id="rwName" placeholder="e.g. Pick the movie" maxlength="40" autocomplete="off" style="margin:0;">
+      <input type="number" id="rwCost" value="5" min="1" max="99" style="margin:0;flex:none;width:72px;">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <button style="flex:1;" onclick="addReward()">Add reward</button>
+      <button class="ghost" style="flex:1;" onclick="addExampleRewards()">Add examples</button>
+    </div>
   </div>
 
   <div class="card" data-tab="chores">
@@ -138,6 +164,12 @@
         <select id="chMode" style="margin:0;" onchange="renderChoreSchedule()">
           <option value="repeat">Repeats</option>
           <option value="once">One time</option>
+        </select>
+      </div>
+      <div class="row2" style="margin-top:6px;">
+        <select id="chPoints" style="margin:0;">
+          <option value="1">1 point</option><option value="2">2 points</option><option value="3">3 points</option>
+          <option value="5">5 points</option><option value="10">10 points</option>
         </select>
       </div>
       <div id="chDays" style="display:flex;gap:6px;margin:6px 0 12px;"></div>
@@ -190,6 +222,20 @@
       <button onclick="addListP()" style="flex:none;">Add list</button>
     </div>
     <div id="listsMsg" class="msgline"></div>
+  </div>
+
+  <div class="card" data-tab="lists">
+    <strong>🛒 Shopping list</strong>
+    <div style="font-size:13px;color:#737983;margin:6px 0 10px;">Household items. On the board this tab is locked behind the parent PIN. Turn it on under Settings → Board tabs.</div>
+    <div id="shopCats" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;"></div>
+    <div id="shopPresets" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
+    <div class="row2">
+      <input type="text" id="shopName" placeholder="Type an item" maxlength="60" autocomplete="off" style="margin:0;" onkeydown="if(event.key==='Enter')addShopItem()">
+      <button onclick="addShopItem()" style="flex:none;">Add</button>
+    </div>
+    <div id="shopItems" style="margin-top:10px;"></div>
+    <button class="ghost" style="width:100%;margin-top:8px;" onclick="shopAct({action:'clearDone'})">Clear checked items</button>
+    <div id="shopMsg" class="msgline"></div>
   </div>
 
   <div class="card" data-tab="meals" id="aiMealCard" style="display:none;">
@@ -403,13 +449,29 @@
   <div class="card" data-tab="settings">
     <strong>Board tabs</strong>
     <div style="font-size:13px;color:#737983;margin:6px 0 10px;">Switch off what your family doesn't use — the tab disappears from the Portal.</div>
-    <div id="featRow" style="display:flex;flex-direction:column;gap:10px;">
-      <label style="display:flex;align-items:center;gap:10px;font-size:15px;"><input type="checkbox" id="featChores" onchange="setFeatures()" style="width:20px;height:20px;flex:none;"> Chores &amp; stars</label>
-      <label style="display:flex;align-items:center;gap:10px;font-size:15px;"><input type="checkbox" id="featLists" onchange="setFeatures()" style="width:20px;height:20px;flex:none;"> Lists</label>
-      <label style="display:flex;align-items:center;gap:10px;font-size:15px;"><input type="checkbox" id="featMeals" onchange="setFeatures()" style="width:20px;height:20px;flex:none;"> Meals</label>
-      <label style="display:flex;align-items:center;gap:10px;font-size:15px;"><input type="checkbox" id="featRoutines" onchange="setFeatures()" style="width:20px;height:20px;flex:none;"> Routines <span style="font-size:12px;color:#737983;">(kids' get-ready checklists)</span></label>
+    <div id="featRow" style="display:flex;flex-direction:column;gap:10px;"></div>
+    <div style="margin-top:14px;">
+      <strong style="font-size:14px;">Open on</strong>
+      <div style="font-size:13px;color:#737983;margin:4px 0 6px;">The tab the Portal starts on, and returns to after it has been idle.</div>
+      <select id="defaultTab" onchange="postFeatures({defaultTab: this.value})" style="margin:0;"></select>
     </div>
+    <div id="pottyKidsBox" style="display:none;margin-top:14px;"></div>
     <div id="featMsg" class="msgline"></div>
+  </div>
+
+  <div class="card" data-tab="settings">
+    <strong>🎤 Voice commands</strong>
+    <p style="font-size:13px;color:#737983;margin:6px 0 10px;">Off by default. While it's off the Portal shows no mic button and never records. When on, tap 🎤 on the board (parent PIN), say a short command, and confirm what it heard. Offline mode runs entirely on the Portal; no audio is sent anywhere. English only, and it understands a few fixed phrases.</p>
+    <label style="display:flex;align-items:center;gap:10px;font-size:15px;"><input type="checkbox" id="voiceOn" onchange="saveVoice()" style="width:20px;height:20px;flex:none;"> Turn on voice commands</label>
+    <div id="voiceMore" style="display:none;margin-top:10px;">
+      <label for="voiceEngine">Speech engine</label>
+      <select id="voiceEngine" onchange="saveVoice()" style="margin:0 0 8px;">
+        <option value="offline">Offline on this Portal (private)</option>
+        <option value="gemini">Gemini (sends audio to Google; needs your AI key)</option>
+      </select>
+      <div id="voiceExamples" style="font-size:13px;color:#4d535e;"></div>
+    </div>
+    <div id="voiceMsg" class="msgline"></div>
   </div>
 
   <div class="card" data-tab="settings">
@@ -487,7 +549,9 @@
 
   <div class="card" data-tab="settings">
     <strong>Backup &amp; copy to another Portal</strong>
-    <p style="font-size:13px;color:#737983;margin:6px 0 10px;">Export everything — calendars, members, chores, lists, meals, layout, <em>and</em> your connected accounts &amp; API key — as one code. Paste it into another Portal's setup page to clone this one. The code contains credentials, so treat it like a password.</p>
+    <p style="font-size:13px;color:#737983;margin:6px 0 10px;">Export everything — calendars, members, chores, lists, meals, layout, <em>and</em> your connected accounts &amp; API key — as one code. Paste it into another Portal's setup page to clone this one.</p>
+    <p style="font-size:13px;color:#737983;margin:0 0 10px;">The code is <strong>encrypted with a passphrase you choose</strong> (10+ characters). <strong>If you forget the passphrase the backup can't be opened</strong> — there is no reset. Old plain backups can still be imported.</p>
+    <input type="password" id="cfgPass" placeholder="Passphrase (10+ characters)" autocomplete="new-password" style="margin:0 0 8px;">
     <button class="ghost" style="width:100%;" onclick="exportConfig()">Export this Portal's config</button>
     <textarea id="cfgBlob" placeholder="Exported code appears here — or paste one to import" style="width:100%;height:90px;margin-top:10px;font-family:monospace;font-size:12px;"></textarea>
     <button class="ghost" style="width:100%;margin-top:8px;" onclick="importConfig()">Import / restore from the code above</button>
@@ -572,6 +636,16 @@
       <ol style="border-top:1px solid #21262d; padding-top:10px;">
         <li>Only calendars the person owns in iCloud can be shared this way — the built-in Birthdays/Holidays calendars can't, and a Google account synced into the iPhone should use the Google steps instead.</li>
       </ol>
+    </details>
+    <details>
+      <summary>Proton Calendar — get the link (read-only)</summary>
+      <ol>
+        <li>On a computer, open <a href="https://calendar.proton.me" target="_blank" rel="noopener">calendar.proton.me</a>. Sharing needs a paid Proton plan and the web app (the mobile apps can't create links).</li>
+        <li>Go to <strong>Settings → All settings → Calendars</strong> and pick the calendar.</li>
+        <li>Under <strong>Share with anyone</strong>, choose <strong>Create link</strong>. Pick <strong>Full view</strong> so event titles show (Limited view only shows busy times).</li>
+        <li><strong>Copy link</strong> and paste it above.</li>
+      </ol>
+      <p style="font-size:13px;color:#737983;margin:6px 0 2px;">Proton has no way for other apps to add or edit events, so Proton calendars are <strong>read-only</strong> here; events you add from the Portal go to a connected iCloud or Google calendar instead. Proton can take up to 8 hours to publish changes. Anyone with the link can see the calendar, so treat it like a password. If it stops updating, make a new link and replace the old one.</p>
     </details>
     <details>
       <summary>Magic words — send things from any calendar</summary>
@@ -706,33 +780,116 @@ async function saveSaver(){
   } catch(e){ msg(e.message, false); loadSaver(); }
 }
 
-async function loadFeatures(){
-  try {
-    const f = await (await fetch('/api/features')).json();
-    document.getElementById('featChores').checked = f.chores;
-    document.getElementById('featLists').checked = f.lists;
-    document.getElementById('featMeals').checked = f.meals;
-    document.getElementById('featRoutines').checked = f.routines;
-  } catch(e){ /* page still usable without it */ }
+const TAB_LABELS = {calendar:'Calendar', chores:'Chores & stars', lists:'Lists', meals:'Meals',
+  routines:'Routines (kids\' get-ready checklists)', potty:'Potty tracker (dry-night streak toward 3 weeks)',
+  shopping:'Shopping list (parent-locked on the board)'};
+
+function renderFeatures(f){
+  document.getElementById('featRow').innerHTML = Object.keys(TAB_LABELS).map(k =>
+    `<label style="display:flex;align-items:center;gap:10px;font-size:15px;">
+       <input type="checkbox" ${f[k] ? 'checked' : ''} onchange="postFeatures({${k}: this.checked})" style="width:20px;height:20px;flex:none;"> ${TAB_LABELS[k]}</label>`).join('');
+  // Shopping is PIN-locked, so it can't be the tab the board opens on.
+  const sel = document.getElementById('defaultTab');
+  sel.innerHTML = Object.keys(TAB_LABELS).filter(k => k !== 'shopping' && f[k]).map(k =>
+    `<option value="${k}">${TAB_LABELS[k].split(' (')[0]}</option>`).join('');
+  sel.value = f.defaultTab;
+  document.getElementById('pottyKidsBox').style.display = f.potty ? '' : 'none';
+  if (f.potty) loadPottyKids();
 }
 
-async function setFeatures(){
-  const body = {
-    chores: document.getElementById('featChores').checked,
-    lists: document.getElementById('featLists').checked,
-    meals: document.getElementById('featMeals').checked,
-    routines: document.getElementById('featRoutines').checked,
-  };
+async function loadFeatures(){
+  try { renderFeatures(await (await fetch('/api/features')).json()); }
+  catch(e){ /* page still usable without it */ }
+}
+
+async function postFeatures(body){
   try {
     const r = await fetch('/api/features', {method:'POST', body: JSON.stringify(body)});
     const f = await r.json();
     if (!r.ok) throw new Error(f.error || 'failed');
-    document.getElementById('featChores').checked = f.chores;
-    document.getElementById('featLists').checked = f.lists;
-    document.getElementById('featMeals').checked = f.meals;
-    document.getElementById('featRoutines').checked = f.routines;
+    renderFeatures(f);
     show('featMsg', 'Board tabs updated', true);
   } catch(e){ show('featMsg', e.message, false); loadFeatures(); }
+}
+
+async function loadVoice(){
+  try { renderVoice(await (await fetch('/api/voice')).json()); } catch(e){ /* optional */ }
+}
+function renderVoice(v){
+  document.getElementById('voiceOn').checked = v.enabled;
+  document.getElementById('voiceMore').style.display = v.enabled ? '' : 'none';
+  document.getElementById('voiceEngine').value = v.engine;
+  document.getElementById('voiceExamples').innerHTML = (v.engine === 'offline'
+    ? 'Say things like:<br>' + v.examples.map(e => '“' + esc(e) + '”').join('<br>')
+    : 'Gemini understands free-form requests, including calendar events.')
+    + (v.engine === 'gemini' && !v.geminiReady ? '<br><strong>Turn on AI and add a Gemini key first.</strong>' : '');
+}
+async function saveVoice(){
+  try {
+    const r = await fetch('/api/voice', {method:'POST', body: JSON.stringify({
+      enabled: document.getElementById('voiceOn').checked,
+      engine: document.getElementById('voiceEngine').value})});
+    const v = await r.json();
+    if (!r.ok) throw new Error(v.error || 'failed');
+    renderVoice(v);
+    show('voiceMsg', v.enabled ? 'Voice commands are on' : 'Voice commands are off', true);
+  } catch(e){ show('voiceMsg', e.message, false); loadVoice(); }
+}
+
+async function loadPottyKids(){
+  try {
+    const st = await (await fetch('/api/potty')).json();
+    const box = document.getElementById('pottyKidsBox');
+    box.innerHTML = '<strong style="font-size:14px;">Potty tracker: who uses it?</strong>'
+      + '<div style="font-size:13px;color:#737983;margin:4px 0 6px;">Nobody is on the tracker until you tick them. Unticking someone removes them from the board but keeps their history.</div>'
+      + (st.everyone || []).map(m => `<label style="display:flex;align-items:center;gap:10px;font-size:15px;margin:6px 0;">
+          <input type="checkbox" data-id="${esc(m.id)}" ${m.enabled ? 'checked' : ''} onchange="savePottyKids()" style="width:20px;height:20px;flex:none;"> ${esc(m.name)}</label>`).join('');
+  } catch(e){ /* optional section */ }
+}
+async function savePottyKids(){
+  const ids = [...document.querySelectorAll('#pottyKidsBox input[data-id]:checked')].map(i => i.dataset.id);
+  try {
+    const r = await fetch('/api/potty', {method:'POST', body: JSON.stringify({action:'setKids', memberIds: ids})});
+    if (!r.ok) throw new Error((await r.json()).error || 'failed');
+    show('featMsg', 'Potty tracker people updated', true);
+  } catch(e){ show('featMsg', e.message, false); loadPottyKids(); }
+}
+
+// ----- shopping list -----
+let shopState = null, shopCat = '';
+async function loadShopping(){
+  try { shopState = await (await fetch('/api/shopping')).json(); renderShopping(); }
+  catch(e){ show('shopMsg', e.message, false); }
+}
+async function shopAct(action){
+  try {
+    const r = await fetch('/api/shopping', {method:'POST', body: JSON.stringify(action)});
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || 'failed');
+    shopState = body; renderShopping();
+  } catch(e){ show('shopMsg', e.message, false); }
+}
+function addShopItem(){
+  const el = document.getElementById('shopName'), name = el.value.trim();
+  if (!name) return;
+  el.value = '';
+  shopAct({action:'add', name});
+}
+function renderShopping(){
+  const cats = Object.keys(shopState.presets);
+  if (!cats.includes(shopCat)) shopCat = cats[0] || '';
+  const open = new Set(shopState.items.filter(i => !i.done).map(i => i.name.toLowerCase()));
+  document.getElementById('shopCats').innerHTML = cats.map(c =>
+    `<button class="${c === shopCat ? '' : 'ghost'}" style="padding:8px 12px;font-size:13px;" data-cat="${esc(c)}" onclick="shopCat=this.dataset.cat;renderShopping()">${esc(c)}</button>`).join('');
+  document.getElementById('shopPresets').innerHTML = (shopState.presets[shopCat] || []).map(n =>
+    `<button class="ghost" style="padding:8px 12px;font-size:13px;${open.has(n.toLowerCase()) ? 'border:1px solid #f0584c;' : ''}" data-name="${esc(n)}" onclick="shopAct({action:'add',name:this.dataset.name})">${open.has(n.toLowerCase()) ? '✓ ' : ''}${esc(n)}</button>`).join('');
+  const items = [...shopState.items].sort((a, b) => a.done - b.done);
+  document.getElementById('shopItems').innerHTML = items.map(i => `
+    <div class="cal-row">
+      <input type="checkbox" ${i.done ? 'checked' : ''} data-id="${esc(i.id)}" onchange="shopAct({action:'toggle',id:this.dataset.id})" style="width:20px;height:20px;flex:none;">
+      <div class="grow"><div class="cal-name" style="${i.done ? 'text-decoration:line-through;color:#9aa0a8;' : ''}">${esc(i.name)}</div></div>
+      <button class="del" data-id="${esc(i.id)}" onclick="shopAct({action:'delete',id:this.dataset.id})" aria-label="Remove">✕</button>
+    </div>`).join('') || '<div class="empty">Nothing to buy</div>';
 }
 
 async function loadEffects(){
@@ -962,7 +1119,7 @@ function showTab(name){
   }
   document.querySelectorAll('[data-tabbtn]').forEach(b =>
     b.className = b.dataset.tabbtn === name ? '' : 'ghost');
-  if (name === 'lists') loadListsP();
+  if (name === 'lists') { loadListsP(); loadShopping(); }
   if (name === 'family') loadMembers();
   if (name === 'chores') loadChores();
   if (name === 'routines') loadRoutines();
@@ -1051,9 +1208,9 @@ let choreDays = [2,3,4,5,6]; // default school days
 let choreStatus = null;
 
 const CHORE_BANK = [
-  ['🛏️','Make the bed'],['🦷','Brush teeth'],['📚','Homework'],['🐕','Feed the pet'],
+  ['🛏️','Make the bed'],['📚','Homework'],['🐕','Feed the pet'],
   ['🍽️','Set the table'],['🥣','Clear the dishes'],['🧺','Put laundry away'],
-  ['🧸','Tidy your room'],['🗑️','Take out the trash'],['🚿','Shower'],
+  ['🧸','Tidy your room'],['🗑️','Take out the trash'],
   ['🎵','Practice music'],['🪴','Water the plants']];
 
 function renderChoreBank(){
@@ -1115,8 +1272,41 @@ function renderChores(){
       <div style="background:#efece4;border-radius:6px;height:10px;margin-top:6px;overflow:hidden;">
         <div style="background:${esc(m.color)};width:${pct}%;height:100%;"></div>
       </div>
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        ${[-5,-1,1,5].map(n => `<button class="ghost" style="flex:1;padding:8px 0;" onclick="adjustPts('${esc(m.id)}',${n})">${n > 0 ? '+' : '−'}${Math.abs(n)}</button>`).join('')}
+      </div>
+      ${(st.rewards || []).length ? `<div style="display:flex;gap:6px;margin-top:8px;align-items:center;">
+        <span style="font-size:13px;color:#737983;flex:none;">🎁 ${st.spendable[m.id] || 0} to spend</span>
+        <select data-spend="${esc(m.id)}" style="margin:0;flex:1;">${st.rewards.map(r => `<option value="${esc(r.id)}">${esc(r.icon)} ${esc(r.name)} (${r.cost})</option>`).join('')}</select>
+        <button class="ghost" style="flex:none;padding:8px 12px;" data-m="${esc(m.id)}" onclick="spendPts(this.dataset.m)">Spend</button>
+      </div>` : ''}
     </div>`;
   }).join('') || '<div class="empty">Add family members first (Family tab)</div>';
+
+  document.getElementById('ptHistory').innerHTML = (st.adjustments || []).length
+    ? '<div style="font-size:13px;color:#737983;margin:12px 0 4px;">Changes this week</div>' + st.adjustments.map(a => `
+      <div class="cal-row">
+        <div class="grow">
+          <div class="cal-name">${esc(memberName(a.memberId))}: ${a.kind === 'redeem' ? '🎁 spent ' + a.cost : (a.delta > 0 ? '+' : '') + a.delta}</div>
+          <div class="cal-url">${esc(a.date)}${a.reason ? ' · ' + esc(a.reason) : ''}</div>
+        </div>
+        <button class="del" onclick="choreAct({action:'undoAdjust',id:'${esc(a.id)}'})" aria-label="Undo">✕</button>
+      </div>`).join('') : '';
+
+  document.getElementById('rewardBox').innerHTML = (st.rewards || []).map(r => `
+    <div class="cal-row"><span style="font-size:20px;">${esc(r.icon)}</span>
+      <div class="grow"><div class="cal-name">${esc(r.name)}</div><div class="cal-url">${r.cost} points</div></div>
+      <button class="del" data-id="${esc(r.id)}" onclick="choreAct({action:'deleteReward',id:this.dataset.id})" aria-label="Remove">✕</button>
+    </div>`).join('') || '<div class="empty">No rewards yet</div>';
+
+  document.getElementById('starterBox').innerHTML = (st.starter || []).map(c => {
+    const days = c.days.length === 7 ? 'every day' : c.days.map(d => ['','Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]).join(' ');
+    return `<label class="cal-row" style="cursor:pointer;">
+      <input type="checkbox" ${starterOff.has(c.title) ? '' : 'checked'} onchange="toggleStarter(${esc(JSON.stringify(c.title)).replace(/"/g, '&quot;')}, this.checked)" style="width:20px;height:20px;flex:none;">
+      <span style="font-size:20px;">${esc(c.icon)}</span>
+      <div class="grow"><div class="cal-name">${esc(c.title)}</div>
+      <div class="cal-url">${c.points} pt · ${esc(days)}</div></div></label>`;
+  }).join('');
 
   // Chore list
   const dayNames = ['','Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -1128,7 +1318,7 @@ function renderChores(){
       <span style="font-size:20px;">${esc(c.icon || '⭐')}</span>
       <div class="grow">
         <div class="cal-name">${esc(c.title)}</div>
-        <div class="cal-url">${esc(memberName(c.memberId))} · ${esc(days)}</div>
+        <div class="cal-url">${esc(memberName(c.memberId))} · ${esc(days)} · ${c.points || 1} pt</div>
       </div>
       <button class="del" onclick="choreAct({action:'deleteChore',choreId:'${esc(c.id)}'})">✕</button>
     </div>`;
@@ -1137,14 +1327,46 @@ function renderChores(){
   // Member chips for the add form — tap to include several kids at once.
   if (!choreSelMembers.length && st.members && st.members.length)
     choreSelMembers = [st.members[0].id];
-  document.getElementById('chMembers').innerHTML = (st.members || []).map(m => {
+  const chips = (st.members || []).map(m => {
     const on = choreSelMembers.includes(m.id);
     return `<button class="${on ? '' : 'ghost'}" style="padding:8px 14px;${on ? 'background:' + esc(m.color) + ';' : ''}"
       onclick="toggleChoreMember('${esc(m.id)}')">${esc(m.name)}</button>`;
   }).join('');
+  document.getElementById('chMembers').innerHTML = chips;
+  document.getElementById('starterMembers').innerHTML = chips;
 }
 
 let choreSelMembers = [];
+const EXAMPLE_REWARDS = [['📺','Extra screen time (30 min)',8],['🎬','Pick the family movie',10],
+  ['🍦','Ice cream treat',6],['🌙','Stay up 15 min late',5],['🧸','Small toy',15]];
+function addReward(){
+  const name = document.getElementById('rwName').value.trim();
+  if (!name) return show('choreMsg', 'Name the reward', false);
+  choreAct({action:'addReward', name, cost: parseInt(document.getElementById('rwCost').value) || 0,
+    icon: document.getElementById('rwIcon').value.trim() || '🎁'});
+  document.getElementById('rwName').value = '';
+}
+async function addExampleRewards(){
+  const have = new Set((choreStatus.rewards || []).map(r => r.name.toLowerCase()));
+  for (const [icon, name, cost] of EXAMPLE_REWARDS)
+    if (!have.has(name.toLowerCase())) await choreAct({action:'addReward', icon, name, cost});
+}
+function spendPts(memberId){
+  const sel = document.querySelector(`select[data-spend="${CSS.escape(memberId)}"]`);
+  choreAct({action:'redeem', memberId, rewardId: sel.value});
+}
+const starterOff = new Set(); // starter chores the user unticked
+function toggleStarter(title, on){ if (on) starterOff.delete(title); else starterOff.add(title); }
+function adjustPts(id, delta){
+  choreAct({action:'adjust', memberId:id, delta, reason: document.getElementById('ptReason').value.trim()});
+}
+async function addStarter(){
+  if (!choreSelMembers.length) return show('choreMsg', 'Pick at least one person', false);
+  const titles = (choreStatus.starter || []).map(c => c.title).filter(t => !starterOff.has(t));
+  if (!titles.length) return show('choreMsg', 'Tick at least one chore', false);
+  await choreAct({action:'addStarterPack', memberIds: choreSelMembers, titles});
+  show('choreMsg', '✓ Starter chores added', true);
+}
 function toggleChoreMember(id){
   choreSelMembers = choreSelMembers.includes(id)
     ? choreSelMembers.filter(x => x !== id) : [...choreSelMembers, id];
@@ -1175,7 +1397,8 @@ function addChore(){
   const once = document.getElementById('chMode').value === 'once';
   const action = {action:'addChore', title,
     icon: document.getElementById('chIcon').value,
-    memberIds: choreSelMembers};
+    memberIds: choreSelMembers,
+    points: parseInt(document.getElementById('chPoints').value) || 1};
   if (once) {
     action.oneTime = true;
     action.date = document.getElementById('chDate').value;
@@ -2157,11 +2380,14 @@ async function saveLayout(){
 
 // ----- backup / clone -----
 async function exportConfig(){
-  show('cfgMsg', 'Exporting…', true);
+  const passphrase = document.getElementById('cfgPass').value;
+  if (passphrase.length < 10) return show('cfgMsg', 'Choose a passphrase of at least 10 characters first', false);
+  show('cfgMsg', 'Encrypting…', true);
   try {
-    const blob = await (await fetch('/api/export')).text();
-    document.getElementById('cfgBlob').value = blob.trim();
-    show('cfgMsg', '✓ Copied below — paste it into another Portal to clone this one', true);
+    const r = await fetch('/api/export', {method:'POST', body: JSON.stringify({passphrase})});
+    if (!r.ok) throw new Error((await r.json()).error || 'failed');
+    document.getElementById('cfgBlob').value = (await r.text()).trim();
+    show('cfgMsg', '✓ Encrypted code below — keep it and the passphrase safe. Paste both into another Portal to clone this one.', true);
   } catch(e){ show('cfgMsg', e.message, false); }
 }
 async function importConfig(){
@@ -2169,7 +2395,8 @@ async function importConfig(){
   if (!code) return show('cfgMsg', 'Paste an exported code first', false);
   if (!confirm('Replace this Portal’s calendars, members and settings with the imported ones?')) return;
   try {
-    const r = await fetch('/api/import', {method:'POST', body: code});
+    const r = await fetch('/api/import', {method:'POST',
+      body: JSON.stringify({code, passphrase: document.getElementById('cfgPass').value})});
     const body = await r.json();
     if (!r.ok) throw new Error(body.error || 'failed');
     show('cfgMsg', '✓ Imported — reloading…', true);
@@ -2180,6 +2407,7 @@ async function importConfig(){
 loadSaver();
 loadEffects();
 loadFeatures();
+loadVoice();
 loadSync();
 loadWriters();
 loadScale();
