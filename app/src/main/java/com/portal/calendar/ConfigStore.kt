@@ -12,6 +12,8 @@ data class FeedConfig(
     /** "calendar" renders on the board; "inbox" = every event is a command. */
     val kind: String = "calendar")
 
+val CELEBRATE_KINDS = setOf("potty", "routines", "penalty")
+
 /** Feed list persisted as a JSON array in SharedPreferences. */
 class ConfigStore(ctx: Context) {
     private val prefs = ctx.getSharedPreferences("config", Context.MODE_PRIVATE)
@@ -84,6 +86,29 @@ class ConfigStore(ctx: Context) {
         prefs.edit().putString("recap_dismissed", weekStart).commit()
     }
 
+    /** The left panel (clock, weather, today's events) can be tucked away so the main area gets the whole screen. */
+    fun sidebarHidden(): Boolean = prefs.getBoolean("sidebar_hidden", false)
+
+    fun setSidebarHidden(hidden: Boolean) {
+        prefs.edit().putBoolean("sidebar_hidden", hidden).commit()
+    }
+
+    /** The order of the tab cards on the board, as tab keys; always every tab exactly once. */
+    fun tabOrder(): List<String> = Rules.normalizeTabOrder(
+        runCatching { JSONArray(prefs.getString("tab_order", "[]")).let { a -> (0 until a.length()).map { a.getString(it) } } }
+            .getOrDefault(emptyList()))
+
+    fun setTabOrder(order: List<String>) {
+        prefs.edit().putString("tab_order", JSONArray(Rules.normalizeTabOrder(order)).toString()).commit()
+    }
+
+    /** Sound effects (the accident reaction's siren and "womps"). On by default; the volume is the Portal's own. */
+    fun soundEffects(): Boolean = prefs.getBoolean("sound_effects", true)
+
+    fun setSoundEffects(on: Boolean) {
+        prefs.edit().putBoolean("sound_effects", on).commit()
+    }
+
     /** Voice commands are completely off (no mic button, no recording, no model) until a parent turns them on. */
     fun voiceEnabled(): Boolean = prefs.getBoolean("voice_enabled", false)
 
@@ -123,6 +148,14 @@ class ConfigStore(ctx: Context) {
 
     fun setChoreEffects(on: Boolean) {
         prefs.edit().putBoolean("chore_effects", on).commit()
+    }
+
+    /** Full-screen reactions: celebrations for the Pee Tracker ("potty") and Get Ready ("routines"), and the "penalty" screen when points are deducted; all on by default. */
+    fun celebrate(kind: String): Boolean = prefs.getBoolean("celebrate_$kind", true)
+
+    fun setCelebrate(kind: String, on: Boolean) {
+        require(kind in CELEBRATE_KINDS) { "unknown celebration" }
+        prefs.edit().putBoolean("celebrate_$kind", on).commit()
     }
 
     /** Secret the phone presents to the config server; created once, never exported. */

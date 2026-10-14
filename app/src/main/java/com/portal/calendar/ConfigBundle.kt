@@ -27,7 +27,7 @@ object ConfigBundle {
     private val DATA_FILES = listOf(
         "members.json", "lists.json", "chores.json", "chore_done.json",
         "star_goals.json", "chore_history.json", "mealplan.json",
-        "recipes.json", "magic_done.json", "routines.json", "routine_done.json", "chore_points.json", "potty_log.json", "shopping.json", "chore_rewards.json")
+        "recipes.json", "magic_done.json", "routines.json", "routine_done.json", "chore_points.json", "potty_log.json", "shopping.json", "chore_rewards.json", "chore_profiles.json", "potty_bonus.json")
 
     /** Passphrase-encrypted backup for the user to keep or clone with. */
     fun export(ctx: Context, passphrase: String): String =
@@ -60,6 +60,20 @@ object ConfigBundle {
             if (f.exists()) fj.put(name, f.readText())
         }
         return JSONObject().put("v", 1).put("prefs", pj).put("files", fj).toString()
+    }
+
+    /**
+     * Factory reset: erases every setting, member, chore, list, feed, credential and cached feed, leaving a fresh install.
+     * The pairing token is kept so the phone that asked for the reset stays signed in; the unpacked voice model stays too.
+     */
+    fun resetAll(ctx: Context) {
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val token = prefs.getString("server_token", null)
+        val e = prefs.edit().clear()
+        token?.let { e.putString("server_token", it) }
+        e.commit()
+        ctx.filesDir.listFiles()?.forEach { if (it.isFile) it.delete() }
+        FamilySync.applyRole(ctx) // back to solo
     }
 
     /** Replaces this device's config with the bundle. Throws on a bad code or wrong passphrase. */

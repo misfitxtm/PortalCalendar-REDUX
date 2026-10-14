@@ -5,33 +5,46 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>PortalHub REDUX</title>
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#f0584c">
+<meta name="theme-color" content="#121418" id="themeColor">
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('portalhub-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%23F0584C'/%3E%3Crect x='16' y='28' width='68' height='56' rx='10' fill='white'/%3E%3Crect x='24' y='42' width='32' height='9' rx='4.5' fill='%232BB3A3'/%3E%3Crect x='24' y='56' width='44' height='9' rx='4.5' fill='%23F2A93B'/%3E%3Crect x='24' y='70' width='24' height='9' rx='4.5' fill='%234FA3E3'/%3E%3C/svg%3E">
 <style>
-  :root { color-scheme: light; }
+  /* Dark by default; the header button switches to light (remembered in this browser). */
+  :root {
+    color-scheme: dark;
+    --bg: #121418; --card: #1c2027; --card-border: #2a3039; --ink: #e7eaf0; --ink2: #c4cad4;
+    --muted: #9ba5b3; --faint: #7d8794; --line: #2a3039; --ghost: #2c333d;
+    --field: #14171c; --field-border: #36404c; --ok: #4cc27a; --err: #ff6b5f; --shadow: rgba(0,0,0,.35);
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f4f1ea; --card: #ffffff; --card-border: #e8e4da; --ink: #333a45; --ink2: #4d535e;
+    --muted: #737983; --faint: #9aa0a8; --line: #efece4; --ghost: #eae6dc;
+    --field: #fbfaf6; --field-border: #ddd8cc; --ok: #2e9e4f; --err: #d63b2f; --shadow: rgba(60,50,40,.06);
+  }
   * { box-sizing: border-box; }
   body {
     margin: 0; padding: 20px 16px 48px;
-    background: #f4f1ea; color: #333a45;
+    background: var(--bg); color: var(--ink);
     font: 16px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif;
   }
-  h1 { font-size: 23px; margin: 0 0 4px; color: #333a45; }
-  .sub { color: #737983; font-size: 14px; margin-bottom: 20px; }
+  h1 { font-size: 23px; margin: 0 0 4px; color: var(--ink); }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
   .card {
-    background: #ffffff; border: 1px solid #e8e4da; border-radius: 16px;
+    background: var(--card); border: 1px solid var(--card-border); border-radius: 16px;
     padding: 16px; margin-bottom: 16px;
-    box-shadow: 0 2px 6px rgba(60,50,40,.06);
+    box-shadow: 0 2px 6px var(--shadow);
   }
   .cal-row {
     display: flex; align-items: center; gap: 12px;
-    padding: 10px 0; border-bottom: 1px solid #efece4;
+    padding: 10px 0; border-bottom: 1px solid var(--line);
   }
   .cal-row:last-child { border-bottom: none; }
   .dot { width: 16px; height: 16px; border-radius: 50%; flex: none; }
   .cal-name { font-weight: 600; }
-  .cal-url { color: #9aa0a8; font-size: 12px; word-break: break-all;
+  .cal-url { color: var(--faint); font-size: 12px; word-break: break-all;
              overflow: hidden; display: -webkit-box;
              -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
   .grow { flex: 1; min-width: 0; }
@@ -39,12 +52,12 @@
     font: inherit; border: none; border-radius: 12px; cursor: pointer;
     padding: 12px 16px; background: #f0584c; color: #fff; font-weight: 600;
   }
-  button.ghost { background: #eae6dc; color: #333a45; }
+  button.ghost { background: var(--ghost); color: var(--ink); }
   button.del { background: none; color: #f0584c; font-size: 22px; padding: 4px 8px; flex: none; }
   input[type=text], input[type=url], input[type=date], input[type=time],
   input[type=number], select, textarea {
-    width: 100%; font: inherit; color: #333a45;
-    background: #fbfaf6; border: 1px solid #ddd8cc; border-radius: 12px;
+    width: 100%; font: inherit; color: var(--ink);
+    background: var(--field); border: 1px solid var(--field-border); border-radius: 12px;
     padding: 12px; margin: 6px 0 12px;
   }
   textarea { min-height: 72px; resize: vertical; }
@@ -52,41 +65,45 @@
     width: 52px; height: 40px; border: none; background: none; padding: 0;
     vertical-align: middle;
   }
-  label { font-size: 13px; color: #737983; }
+  label { font-size: 13px; color: var(--muted); }
   .row2 { display: flex; align-items: center; gap: 12px; margin: 6px 0 12px; }
   .btnrow { display: flex; gap: 10px; margin-top: 4px; }
   .btnrow button { flex: 1; }
   .msgline { min-height: 22px; font-size: 14px; margin-top: 10px; }
-  .msgline.ok { color: #2e9e4f; } .msgline.err { color: #d63b2f; }
+  .msgline.ok { color: var(--ok); } .msgline.err { color: var(--err); }
 
   /* ----- setup wizard ----- */
   #wizard {
     display: none; position: fixed; inset: 0; z-index: 50;
-    background: #f4f1ea; flex-direction: column; overflow-y: auto;
+    background: var(--bg); flex-direction: column; overflow-y: auto;
   }
   .wiz-top {
     display: flex; align-items: center; padding: 16px;
   }
   .wiz-dots { flex: 1; display: flex; gap: 7px; justify-content: center; }
-  .wiz-dot { width: 9px; height: 9px; border-radius: 50%; background: #ddd8cc; transition: all .2s; }
+  .wiz-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--field-border); transition: all .2s; }
   .wiz-dot.on { background: #f0584c; width: 22px; border-radius: 5px; }
-  .wiz-skip { color: #737983; font-size: 14px; background: none; border: none; padding: 8px; }
+  .wiz-skip { color: var(--muted); font-size: 14px; background: none; border: none; padding: 8px; }
   .wiz-body { flex: 1; max-width: 560px; width: 100%; margin: 0 auto; padding: 8px 20px 16px; }
   .wiz-kicker { color: #f0584c; font-size: 13px; font-weight: 600; letter-spacing: .12em; }
   .wiz-title { font-size: 26px; font-weight: 700; margin: 6px 0 8px; line-height: 1.2; }
-  .wiz-sub { color: #737983; font-size: 15px; line-height: 1.5; margin-bottom: 18px; }
+  .wiz-sub { color: var(--muted); font-size: 15px; line-height: 1.5; margin-bottom: 18px; }
   .wiz-nav {
     max-width: 560px; width: 100%; margin: 0 auto; padding: 8px 20px 28px;
     display: flex; gap: 10px;
   }
   .wiz-nav button { flex: 1; padding: 15px; font-size: 16px; border-radius: 14px; }
   .wiz-emoji { font-size: 44px; margin: 4px 0 10px; }
+  /* Seven tabs are wider than a phone: let the row scroll by itself instead of panning the whole page. */
+  #tabbar { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  #tabbar::-webkit-scrollbar { display: none; }
+  #tabbar button { flex: 1 0 auto !important; padding: 11px 14px; }
   details { margin-top: 4px; }
   summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
-  ol { padding-left: 20px; color: #4d535e; font-size: 14px; }
+  ol { padding-left: 20px; color: var(--ink2); font-size: 14px; }
   ol li { margin-bottom: 8px; }
-  .empty { color: #737983; text-align: center; padding: 12px 0; }
-  code { background: #efece4; border-radius: 5px; padding: 1px 6px; font-size: 13px; }
+  .empty { color: var(--muted); text-align: center; padding: 12px 0; }
+  code { background: var(--line); border-radius: 5px; padding: 1px 6px; font-size: 13px; }
   a { color: #f0584c; }
 </style>
 </head>
@@ -101,22 +118,23 @@
     <div class="wiz-nav" id="wizNav"></div>
   </div>
 
+  <button class="ghost" id="themeBtn" onclick="toggleTheme()" style="float:right;padding:6px 12px;font-size:14px;" aria-label="Switch between dark and light">☀️ Light</button>
   <h1>PortalHub REDUX</h1>
   <div class="sub">Your family hub, served straight from the Portal</div>
 
   <div id="tabbar" style="display:flex;gap:8px;margin-bottom:16px;">
-    <button data-tabbtn="calendar" onclick="showTab('calendar')" style="flex:1;">Calendar</button>
-    <button data-tabbtn="chores" class="ghost" onclick="showTab('chores')" style="flex:1;">Chores</button>
-    <button data-tabbtn="routines" class="ghost" onclick="showTab('routines')" style="flex:1;">Routines</button>
-    <button data-tabbtn="lists" class="ghost" onclick="showTab('lists')" style="flex:1;">Lists</button>
-    <button data-tabbtn="meals" class="ghost" onclick="showTab('meals')" style="flex:1;">Meals</button>
-    <button data-tabbtn="family" class="ghost" onclick="showTab('family')" style="flex:1;">Family</button>
-    <button data-tabbtn="settings" class="ghost" onclick="showTab('settings')" style="flex:1;">Settings</button>
+    <button data-tabbtn="calendar" onclick="showTab('calendar')" style="flex:1;">📅 Calendar</button>
+    <button data-tabbtn="chores" class="ghost" onclick="showTab('chores')" style="flex:1;">✅ Chores</button>
+    <button data-tabbtn="routines" class="ghost" onclick="showTab('routines')" style="flex:1;">⏰ Get Ready</button>
+    <button data-tabbtn="lists" class="ghost" onclick="showTab('lists')" style="flex:1;">📝 Lists</button>
+    <button data-tabbtn="meals" class="ghost" onclick="showTab('meals')" style="flex:1;">🍽️ Meals</button>
+    <button data-tabbtn="family" class="ghost" onclick="showTab('family')" style="flex:1;">👨‍👩‍👧 Family</button>
+    <button data-tabbtn="settings" class="ghost" onclick="showTab('settings')" style="flex:1;">⚙️ Settings</button>
   </div>
 
   <div class="card" data-tab="chores">
-    <strong>Points this week</strong>
-    <div style="font-size:13px;color:#737983;margin-top:4px;">Resets every Friday. Add a bonus or take points away; the reason is optional.</div>
+    <strong>⭐ Points this week</strong>
+    <div style="font-size:13px;color:var(--muted);margin-top:4px;">Resets every Friday. Add a bonus or take points away; the reason is optional.</div>
     <input type="text" id="ptReason" placeholder="Reason, e.g. Great job / Got in trouble" maxlength="60" autocomplete="off" style="margin:8px 0 0;">
     <div id="starBox" style="margin-top:8px;"></div>
     <div id="ptHistory"></div>
@@ -124,16 +142,51 @@
   </div>
 
   <div class="card" data-tab="chores">
-    <strong>Starter chores</strong>
-    <div style="font-size:13px;color:#737983;margin:6px 0 10px;">Everyday household tasks. Untick any you don't want. People who already have a chore are skipped. Hygiene like teeth and showers belongs in Routines.</div>
+    <strong>🧹 Starter chores</strong>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Everyday household tasks. Untick any you don't want. People who already have a chore are skipped. Hygiene like teeth and showers belongs in Get Ready.</div>
     <div id="starterBox"></div>
     <div id="starterMembers" style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0;"></div>
     <button style="width:100%;" onclick="addStarter()">Add starter chores to the selected people</button>
   </div>
 
   <div class="card" data-tab="chores">
-    <strong>🎁 Rewards</strong>
-    <div style="font-size:13px;color:#737983;margin:6px 0 10px;">Prizes the kids can spend this week's points on. Spending takes points off and they reset every Friday, so unspent points don't carry over. Spend from here or from the points badge on the board (parent PIN).</div>
+    <strong>👤 Chore profiles</strong>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">A profile is a ready-made set of repeating chores. Pick one, pick the people, and it adds the chores they don't already have. Or save someone's current chores as your own profile.</div>
+    <select id="profSel" onchange="profSelId=this.value;renderProfileDetail()" style="margin:0 0 8px;"></select>
+    <div id="profDetail" style="font-size:13px;color:var(--ink2);margin-bottom:8px;"></div>
+    <div id="profMembers" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;"></div>
+    <div style="display:flex;gap:8px;">
+      <button style="flex:1;" onclick="applyProfile()">Apply to the selected people</button>
+      <button class="ghost" id="profDelBtn" style="flex:none;display:none;" onclick="deleteProfile()">Delete</button>
+    </div>
+    <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px;">
+      <strong style="font-size:14px;">Save a profile from someone's chores</strong>
+      <div class="row2" style="margin-top:8px;">
+        <select id="profFrom" style="margin:0;"></select>
+        <input type="text" id="profName" placeholder="Profile name" maxlength="40" autocomplete="off" style="margin:0;">
+      </div>
+      <button class="ghost" style="width:100%;margin-top:8px;" onclick="saveProfile()">Save as profile</button>
+    </div>
+  </div>
+
+  <div class="card" data-tab="chores">
+    <strong>✏️ Edit chore profiles</strong>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Change what is in a profile, rename it, or make your own. The three age profiles are ordinary profiles, so you can edit or delete them too.</div>
+    <div class="row2"><select id="peSel" onchange="peLoad(this.value)" style="margin:0;"></select>
+      <button class="ghost" style="flex:none;" onclick="peNew()">+ New</button></div>
+    <input type="text" id="peName" placeholder="Profile name, e.g. Ages 10–13" maxlength="40" autocomplete="off" oninput="peDraft.name=this.value">
+    <div id="peItems"></div>
+    <button class="ghost" style="width:100%;margin:6px 0 10px;" onclick="peAddItem()">+ Add a chore to this profile</button>
+    <div style="display:flex;gap:8px;">
+      <button style="flex:1;" onclick="peSave()">Save profile</button>
+      <button class="ghost" style="flex:none;" onclick="peDelete()">Delete</button>
+    </div>
+    <button class="ghost" style="width:100%;margin-top:8px;" onclick="choreAct({action:'restoreDefaultProfiles'})">Restore the default age profiles</button>
+  </div>
+
+  <div class="card" data-tab="chores">
+    <strong>🎁 Rewards (the 💰 Reward Shop 💰)</strong>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Prizes the kids can spend this week's points on. Tap any emoji, name or cost to change it. Spending takes points off and they reset every Friday, so unspent points don't carry over. Kids can pick from them on the board's <strong>💰 Reward Shop 💰</strong> tab (turn it on under Settings → Board tabs); a parent approves with the PIN. You can also spend from here or from the points badge.</div>
     <div id="rewardBox"></div>
     <div class="row2" style="margin-top:10px;">
       <input type="text" id="rwIcon" value="🎁" maxlength="4" style="margin:0;flex:none;width:64px;text-align:center;">
@@ -142,16 +195,17 @@
     </div>
     <div style="display:flex;gap:8px;margin-top:8px;">
       <button style="flex:1;" onclick="addReward()">Add reward</button>
-      <button class="ghost" style="flex:1;" onclick="addExampleRewards()">Add examples</button>
+      <button class="ghost" style="flex:1;" onclick="toggleIdeas()">Reward ideas ▾</button>
     </div>
+    <div id="rewardIdeas" style="display:none;margin-top:12px;border-top:1px solid var(--line);padding-top:10px;"></div>
   </div>
 
   <div class="card" data-tab="chores">
-    <strong>Chores</strong>
+    <strong>✅ Chores</strong>
     <div id="choreBox" style="margin-top:8px;"></div>
-    <div style="border-top:1px solid #efece4;margin-top:14px;padding-top:12px;">
+    <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px;">
       <strong style="font-size:14px;">Add a chore</strong>
-      <div id="choreBank" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px;">For a ready-made set by age, use <strong>Chore profiles</strong> above.</div>
       <div class="row2" style="margin-top:8px;">
         <select id="chIcon" style="margin:0;flex:none;width:84px;">
           <option>⭐</option><option>🛏️</option><option>🦷</option><option>🧹</option>
@@ -181,10 +235,10 @@
   </div>
 
   <div class="card" data-tab="routines">
-    <strong>Routines</strong>
-    <div style="font-size:13px;color:#737983;margin:6px 0 10px;">Get-ready checklists for the kids — pack homework, lunch, brush teeth. They tick each one off on the board; everything resets the next morning. No stars, just a tidy list. Turn the board tab on under <strong>Settings → Board tabs</strong>.</div>
+    <strong>⏰ Get Ready</strong>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Get-ready checklists for the kids — pack homework, lunch, brush teeth. They tick each one off on the board; everything resets the next morning. No stars, just a tidy list. Turn the board tab on under <strong>Settings → Board tabs</strong>.</div>
     <div id="routineBox" style="margin-top:8px;"></div>
-    <div style="border-top:1px solid #efece4;margin-top:14px;padding-top:12px;">
+    <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px;">
       <strong style="font-size:14px;">Add an item</strong>
       <div id="routineBank" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>
       <div class="row2" style="margin-top:8px;">
@@ -209,15 +263,25 @@
           <option value="once">One time</option>
         </select>
       </div>
+      <div class="row2">
+        <label style="flex:none;">Chore</label>
+        <select id="rtChore" style="margin:0;">
+          <option value="@auto">Also check off the chore with the same name</option>
+          <option value="">Don't link to a chore</option>
+        </select>
+      </div>
       <div id="rtDays" style="display:flex;gap:6px;margin:6px 0 12px;"></div>
       <input type="date" id="rtDate" style="display:none;">
       <button style="width:100%;" onclick="addRoutine()">Add item</button>
+      <button class="ghost" style="width:100%;margin-top:8px;" onclick="routineAct({action:'autoLink'})">Link existing items to matching chores</button>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px;">A linked item checks off that person's chore (and gives its points) when the kid ticks it, and un-checks it if they un-tick it. Linked items show "⭐ chore" on the board.</div>
     </div>
     <div id="routineMsg" class="msgline"></div>
   </div>
 
   <div class="card" data-tab="lists">
-    <div id="pageLists"></div>
+    <strong>📝 Lists</strong>
+    <div id="pageLists" style="margin-top:6px;"></div>
     <div class="row2" style="margin-top:8px;">
       <input type="text" id="newListName" placeholder="New list name" autocomplete="off" style="margin:0;">
       <button onclick="addListP()" style="flex:none;">Add list</button>
@@ -227,7 +291,7 @@
 
   <div class="card" data-tab="lists">
     <strong>🛒 Shopping list</strong>
-    <div style="font-size:13px;color:#737983;margin:6px 0 10px;">Household items. On the board this tab is locked behind the parent PIN. Turn it on under Settings → Board tabs.</div>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Household items. On the board this tab is locked behind the parent PIN. Turn it on under Settings → Board tabs.</div>
     <div id="shopCats" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;"></div>
     <div id="shopPresets" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
     <div class="row2">
@@ -241,7 +305,7 @@
 
   <div class="card" data-tab="meals" id="aiMealCard" style="display:none;">
     <strong>✨ Plan a meal</strong>
-    <div style="font-size:13px;color:#737983;margin:6px 0 8px;">Name a dish — AI writes the recipe, puts it on the calendar, and makes a dedicated shopping list for it (named after the recipe) so everyone can check off what's already in the pantry.</div>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 8px;">Name a dish — AI writes the recipe, puts it on the calendar, and makes a dedicated shopping list for it (named after the recipe) so everyone can check off what's already in the pantry.</div>
     <input type="text" id="aiMealDish" placeholder="e.g. sheet-pan fajitas" autocomplete="off">
     <div class="row2">
       <select id="aiMealDay" style="margin:0;"></select>
@@ -259,16 +323,16 @@
   </div>
 
   <div class="card" data-tab="meals">
-    <strong>This week's meals</strong>
-    <div style="font-size:13px;color:#737983;margin:6px 0 8px;">Type a meal and press Enter — start with a recipe's exact name to link it. The board's Meals tab shows the week.</div>
+    <strong>🍽️ This week's meals</strong>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 8px;">Type a meal and press Enter — start with a recipe's exact name to link it. The board's Meals tab shows the week.</div>
     <div id="mealPlan"></div>
     <div id="mealMsg" class="msgline"></div>
   </div>
 
   <div class="card" data-tab="meals">
-    <strong>Recipe box</strong>
+    <strong>📖 Recipe box</strong>
     <div id="recipeBox" style="margin-top:8px;"></div>
-    <div style="border-top:1px solid #efece4;margin-top:12px;padding-top:12px;">
+    <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:12px;">
       <div class="row2" id="aiRecipeRow" style="display:none;">
         <input type="text" id="aiDish" placeholder="✨ e.g. one-pot chicken and rice" autocomplete="off" style="margin:0;">
         <button class="ghost" style="flex:none;" onclick="aiRecipe()">Generate</button>
@@ -282,9 +346,9 @@
   </div>
 
   <div class="card" data-tab="family">
-    <strong>Family members</strong>
-    <div style="font-size:13px;color:#737983;margin:6px 0 10px;">Members power chores, stars and color coding across the board. Started from your calendar names — edit freely.</div>
-    <div style="font-size:12px;color:#a3a8b0;margin-bottom:4px;">The optional PIN means only that person (or a parent with the kid-lock PIN) can check off their chores on the board.</div>
+    <strong>👨‍👩‍👧 Family members</strong>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Members power chores, stars and color coding across the board. Started from your calendar names — edit freely.</div>
+    <div style="font-size:12px;color:var(--faint);margin-bottom:4px;">The optional PIN means only that person (or a parent with the kid-lock PIN) can check off their chores on the board.</div>
     <div id="membersBox"></div>
     <div class="btnrow" style="margin-top:10px;">
       <button class="ghost" onclick="addMemberRow()">+ Add member</button>
@@ -294,8 +358,8 @@
   </div>
 
   <div class="card" data-tab="calendar">
-    <strong>Add an event</strong>
-    <div id="eventOff" style="color:#737983;font-size:14px;margin-top:8px;">
+    <strong>📅 Add an event</strong>
+    <div id="eventOff" style="color:var(--muted);font-size:14px;margin-top:8px;">
       Connect iCloud (below) to add events from this page — they sync back to the family calendar on everyone's devices.
     </div>
     <div id="eventForm" style="display:none;">
@@ -306,7 +370,7 @@
           <label for="evDate">Date</label>
           <input type="date" id="evDate">
         </div>
-        <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:#333a45;margin-top:14px;white-space:nowrap;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink);margin-top:14px;white-space:nowrap;">
           <input type="checkbox" id="evAllDay" onchange="toggleAllDay()" style="width:20px;height:20px;flex:none;"> All day
         </label>
       </div>
@@ -335,7 +399,7 @@
 
   <div class="card" data-tab="calendar" id="aiImportCard" style="display:none;">
     <strong>✨ Smart import</strong>
-    <div style="font-size:13px;color:#737983;margin:6px 0 8px;">Paste an email or schedule, or snap a photo of a flyer — AI proposes events, list items and chores, and nothing is added until you confirm.</div>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 8px;">Paste an email or schedule, or snap a photo of a flyer — AI proposes events, list items and chores, and nothing is added until you confirm.</div>
     <textarea id="aiText" placeholder="Paste text here (optional if you attach a photo)"></textarea>
     <div class="row2">
       <input type="file" id="aiPhoto" accept="image/*" style="margin:0;flex:1;font-size:13px;">
@@ -350,7 +414,7 @@
   </div>
 
   <div class="card" data-tab="calendar">
-    <strong>Add a calendar</strong>
+    <strong>🗓️ Add a calendar</strong>
     <label for="name">Person / calendar name</label>
     <input type="text" id="name" placeholder="e.g. Moshe" autocomplete="off">
     <label for="url">Calendar link (Google secret address or Apple public link — how-to below)</label>
@@ -363,85 +427,101 @@
         <option value="inbox">Inbox — every event is a command (hidden)</option>
       </select>
     </div>
-    <div style="font-size:13px;color:#737983;margin-bottom:10px;">Tip: make a shared calendar called "Portal Inbox", hide it from view on everyone's phones (its checkbox in the calendar app), and add it here as an Inbox — then anyone can send <em>"add oat milk to groceries"</em> or <em>"remind Chani to water the plants"</em> from anywhere without cluttering their own calendar.</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">Tip: make a shared calendar called "Portal Inbox", hide it from view on everyone's phones (its checkbox in the calendar app), and add it here as an Inbox — then anyone can send <em>"add oat milk to groceries"</em> or <em>"remind Chani to water the plants"</em> from anywhere without cluttering their own calendar.</div>
     <div class="btnrow">
       <button onclick="addCal()">Add calendar</button>
     </div>
   </div>
 
   <div class="card" data-tab="settings">
-    <strong>Idle screen</strong>
-    <div style="font-size:13px;color:#737983;margin:6px 0 10px;">What the Portal does when no one's touched the board for a while.</div>
-    <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;color:#333a45;margin-bottom:10px;">
+    <strong>💤 Idle screen</strong>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">What the Portal does when no one's touched the board for a while.</div>
+    <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;color:var(--ink);margin-bottom:10px;">
       <input type="radio" name="ssMode" value="takeover" onchange="saveSaver()" style="width:20px;height:20px;flex:none;margin-top:2px;">
-      <span>Keep showing the calendar<br><span style="font-size:13px;color:#8b949e;">Always-on display — the board never sleeps. <strong>Heads up:</strong> this turns off the Portal's screensaver completely — even for other apps, and even after you exit the calendar — until you switch this back. (No screensaver coming on? It's almost always this setting.)</span></span>
+      <span>Keep showing the calendar<br><span style="font-size:13px;color:var(--faint);">Always-on display — the board never sleeps. <strong>Heads up:</strong> this turns off the Portal's screensaver completely — even for other apps, and even after you exit the calendar — until you switch this back. (No screensaver coming on? It's almost always this setting.)</span></span>
     </label>
-    <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;color:#333a45;margin-bottom:10px;">
+    <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;color:var(--ink);margin-bottom:10px;">
       <input type="radio" name="ssMode" value="yield" onchange="saveSaver()" style="width:20px;height:20px;flex:none;margin-top:2px;">
       <span>Let the screensaver run after
         <input type="number" id="ssMins" min="1" max="120" onchange="saveSaver()" style="width:56px;padding:2px 6px;"> minutes
-        <br><span style="font-size:13px;color:#8b949e;">The Portal's screensaver (Immortal's, or its own) takes over when idle; tap to return. Gentler on the screen, and leaves the screensaver working normally.</span></span>
+        <br><span style="font-size:13px;color:var(--faint);">The Portal's screensaver (Immortal's, or its own) takes over when idle; tap to return. Gentler on the screen, and leaves the screensaver working normally.</span></span>
     </label>
-    <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;color:#333a45;">
+    <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;color:var(--ink);">
       <input type="radio" name="ssMode" value="off" onchange="saveSaver()" style="width:20px;height:20px;flex:none;margin-top:2px;">
-      <span>Off<br><span style="font-size:13px;color:#8b949e;">The board holds the screen on only while it's open; your normal screensaver runs as usual once you leave the calendar.</span></span>
+      <span>Off<br><span style="font-size:13px;color:var(--faint);">The board holds the screen on only while it's open; your normal screensaver runs as usual once you leave the calendar.</span></span>
     </label>
-    <div id="ssNote" style="color:#8b949e;font-size:13px;margin-top:10px;"></div>
+    <div id="ssNote" style="color:var(--faint);font-size:13px;margin-top:10px;"></div>
   </div>
 
   <div class="card" data-tab="settings">
-    <strong>Sync across Portals</strong>
-    <div style="font-size:13px;color:#737983;margin:6px 0 10px;">Keep chores, stars, lists, meals and family members in step across every Portal in the house — over your Wi-Fi, no account needed. Pick one Portal as the hub; set the others to follow it.</div>
-    <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;color:#333a45;margin-bottom:10px;">
+    <strong>🔄 Sync across Portals</strong>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Keep chores, stars, lists, meals and family members in step across every Portal in the house — over your Wi-Fi, no account needed. Pick one Portal as the hub; set the others to follow it.</div>
+    <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;color:var(--ink);margin-bottom:10px;">
       <input type="radio" name="syncRole" value="solo" onchange="saveSync()" style="width:20px;height:20px;flex:none;margin-top:2px;">
-      <span>Solo<br><span style="font-size:13px;color:#8b949e;">This Portal stands alone (default).</span></span>
+      <span>Solo<br><span style="font-size:13px;color:var(--faint);">This Portal stands alone (default).</span></span>
     </label>
-    <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;color:#333a45;margin-bottom:10px;">
+    <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;color:var(--ink);margin-bottom:10px;">
       <input type="radio" name="syncRole" value="hub" onchange="saveSync()" style="width:20px;height:20px;flex:none;margin-top:2px;">
-      <span>Hub<br><span style="font-size:13px;color:#8b949e;">The source of truth — other Portals follow this one.</span></span>
+      <span>Hub<br><span style="font-size:13px;color:var(--faint);">The source of truth — other Portals follow this one.</span></span>
     </label>
-    <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;color:#333a45;">
+    <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;color:var(--ink);">
       <input type="radio" name="syncRole" value="spoke" onchange="saveSync()" style="width:20px;height:20px;flex:none;margin-top:2px;">
-      <span>Follow another Portal<br><span style="font-size:13px;color:#8b949e;">This Portal mirrors a hub on the network.</span></span>
+      <span>Follow another Portal<br><span style="font-size:13px;color:var(--faint);">This Portal mirrors a hub on the network.</span></span>
     </label>
     <div id="syncSpokeBox" style="display:none;margin:12px 0 0 30px;">
-      <div id="syncDiscovered" style="font-size:13px;color:#737983;margin-bottom:6px;"></div>
-      <label style="font-size:13px;color:#737983;">Hub address</label>
+      <div id="syncDiscovered" style="font-size:13px;color:var(--muted);margin-bottom:6px;"></div>
+      <label style="font-size:13px;color:var(--muted);">Hub address</label>
       <input type="text" id="syncHub" placeholder="192.168.1.42" onchange="saveSync()" style="width:100%;">
-      <label style="font-size:13px;color:#737983;">Pairing code (copy it from the hub's Family tab)</label>
+      <label style="font-size:13px;color:var(--muted);">Pairing code (copy it from the hub's Family tab)</label>
       <input type="password" id="syncCode" placeholder="Paste the hub's pairing code" autocomplete="off" onchange="saveSync()" style="width:100%;">
-      <div id="syncPaired" style="font-size:12px;color:#8b949e;margin-top:2px;"></div>
-      <div style="font-size:12px;color:#8b949e;margin-top:4px;">Hubs now require a pairing code. Once paired, this Portal only talks to the address above and never to one it merely finds on the network.</div>
+      <div id="syncPaired" style="font-size:12px;color:var(--faint);margin-top:2px;"></div>
+      <div style="font-size:12px;color:var(--faint);margin-top:4px;">Hubs now require a pairing code. Once paired, this Portal only talks to the address above and never to one it merely finds on the network.</div>
       <label style="display:flex;align-items:center;gap:10px;font-size:14px;margin-top:12px;">
         <input type="checkbox" id="syncMirror" onchange="saveSync()" style="width:20px;height:20px;flex:none;">
         Also mirror the hub's calendars &amp; settings
       </label>
-      <div style="font-size:12px;color:#8b949e;margin-top:4px;">Off: this Portal keeps its own calendars, theme and layout — only the family data (chores, lists, meals, members) follows the hub. On: it becomes a full mirror of the hub.</div>
+      <div style="font-size:12px;color:var(--faint);margin-top:4px;">Off: this Portal keeps its own calendars, theme and layout — only the family data (chores, lists, meals, members) follows the hub. On: it becomes a full mirror of the hub.</div>
     </div>
-    <div id="syncHubBox" style="display:none;font-size:13px;color:#737983;margin-top:8px;"></div>
+    <div id="syncHubBox" style="display:none;font-size:13px;color:var(--muted);margin-top:8px;"></div>
     <div id="syncMsg" class="msgline"></div>
   </div>
 
   <div class="card" data-tab="settings">
-    <strong>Chore celebrations</strong>
-    <label class="switchrow" style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:15px;color:#333a45;">
+    <strong>🎉 Celebrations</strong>
+    <label class="switchrow" style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:15px;color:var(--ink);">
       <input type="checkbox" id="fxToggle" onchange="toggleEffects()" style="width:22px;height:22px;flex:none;">
       Play a burst of stars when a chore is checked off
     </label>
-    <div style="color:#8b949e;font-size:13px;margin-top:8px;">An extra-big celebration plays when a kid reaches their weekly star goal.</div>
+    <div style="color:var(--faint);font-size:13px;margin:8px 0 12px;">An extra-big celebration plays when a kid reaches their weekly star goal.</div>
+    <label class="switchrow" style="display:flex;align-items:center;gap:10px;font-size:15px;color:var(--ink);">
+      <input type="checkbox" id="fxPotty" onchange="toggleEffects()" style="width:22px;height:22px;flex:none;">
+      <span class="grow">🚽 Full-screen party for a dry night</span>
+      <button class="ghost" type="button" style="flex:none;padding:6px 12px;" onclick="event.preventDefault();previewFx('potty')">▶ Preview</button>
+    </label>
+    <label class="switchrow" style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:15px;color:var(--ink);">
+      <input type="checkbox" id="fxRoutines" onchange="toggleEffects()" style="width:22px;height:22px;flex:none;">
+      <span class="grow">⏰ Full-screen party for a finished Get Ready list</span>
+      <button class="ghost" type="button" style="flex:none;padding:6px 12px;" onclick="event.preventDefault();previewFx('routines')">▶ Preview</button>
+    </label>
+    <label class="switchrow" style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:15px;color:var(--ink);">
+      <input type="checkbox" id="fxPenalty" onchange="toggleEffects()" style="width:22px;height:22px;flex:none;">
+      <span class="grow">💀 Full-screen "ouch" when points are deducted</span>
+      <button class="ghost" type="button" style="flex:none;padding:6px 12px;" onclick="event.preventDefault();previewFx('penalty')">▶ Preview</button>
+    </label>
+    <div style="color:var(--faint);font-size:13px;margin-top:8px;">The parties play a rising power-up jingle; the ouch screen plays a sad game-over tune (turn sounds off under Layout). Preview shows it on the Portal now.</div>
   </div>
 
   <div class="card" data-tab="settings">
-    <strong>AI features <span style="font-size:12px;color:#737983;">(Gemini, optional)</span></strong>
+    <strong>✨ AI features <span style="font-size:12px;color:var(--muted);">(Gemini, optional)</span></strong>
     <label style="display:flex;align-items:center;gap:10px;font-size:15px;margin-top:10px;">
       <input type="checkbox" id="aiToggle" onchange="aiSetEnabled()" style="width:22px;height:22px;flex:none;">
       Enable AI features
     </label>
-    <div style="font-size:13px;color:#737983;margin-top:6px;">Adds Smart Import (photos/text → events, lists, chores) and AI recipes. Until this is on with a key saved, those options don't appear anywhere.</div>
+    <div style="font-size:13px;color:var(--muted);margin-top:6px;">Adds Smart Import (photos/text → events, lists, chores) and AI recipes. Until this is on with a key saved, those options don't appear anywhere.</div>
     <div id="aiConfig" style="display:none;margin-top:10px;">
       <label for="aiKey">Google AI API key</label>
       <input type="text" id="aiKey" placeholder="AIza…" autocomplete="off">
-      <div style="font-size:13px;color:#737983;margin-bottom:8px;">Free at <a href="https://aistudio.google.com" target="_blank" rel="noopener">aistudio.google.com</a> → Get API key. Stored on the Portal only.</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:8px;">Free at <a href="https://aistudio.google.com" target="_blank" rel="noopener">aistudio.google.com</a> → Get API key. Stored on the Portal only.</div>
       <button class="ghost" style="width:100%;" onclick="aiSaveKey()">Save &amp; verify key</button>
       <div id="aiModelRow" style="display:none;margin-top:10px;">
         <label for="aiModel">Model (auto-detected from your key; falls back automatically)</label>
@@ -452,12 +532,12 @@
   </div>
 
   <div class="card" data-tab="settings">
-    <strong>Board tabs</strong>
-    <div style="font-size:13px;color:#737983;margin:6px 0 10px;">Switch off what your family doesn't use — the tab disappears from the Portal.</div>
+    <strong>🗂️ Board tabs</strong>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Switch off what your family doesn't use — the tab disappears from the Portal.</div>
     <div id="featRow" style="display:flex;flex-direction:column;gap:10px;"></div>
     <div style="margin-top:14px;">
       <strong style="font-size:14px;">Open on</strong>
-      <div style="font-size:13px;color:#737983;margin:4px 0 6px;">The tab the Portal starts on, and returns to after it has been idle.</div>
+      <div style="font-size:13px;color:var(--muted);margin:4px 0 6px;">The tab the Portal starts on, and returns to after it has been idle.</div>
       <select id="defaultTab" onchange="postFeatures({defaultTab: this.value})" style="margin:0;"></select>
     </div>
     <div id="pottyKidsBox" style="display:none;margin-top:14px;"></div>
@@ -466,7 +546,7 @@
 
   <div class="card" data-tab="settings">
     <strong>🎤 Voice commands</strong>
-    <p style="font-size:13px;color:#737983;margin:6px 0 10px;">Off by default. While it's off the Portal shows no mic button and never records. When on, tap 🎤 on the board (parent PIN), say a short command, and confirm what it heard. Offline mode runs entirely on the Portal; no audio is sent anywhere. English only, and it understands a few fixed phrases.</p>
+    <p style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Off by default. While it's off the Portal shows no mic button and never records. When on, tap 🎤 on the board (parent PIN), say a short command, and confirm what it heard. Offline mode runs entirely on the Portal; no audio is sent anywhere. English only, and it understands a few fixed phrases.</p>
     <label style="display:flex;align-items:center;gap:10px;font-size:15px;"><input type="checkbox" id="voiceOn" onchange="saveVoice()" style="width:20px;height:20px;flex:none;"> Turn on voice commands</label>
     <div id="voiceMore" style="display:none;margin-top:10px;">
       <label for="voiceEngine">Speech engine</label>
@@ -474,27 +554,35 @@
         <option value="offline">Offline on this Portal (private)</option>
         <option value="gemini">Gemini (sends audio to Google; needs your AI key)</option>
       </select>
-      <div id="voiceExamples" style="font-size:13px;color:#4d535e;"></div>
+      <div id="voiceExamples" style="font-size:13px;color:var(--ink2);"></div>
     </div>
     <div id="voiceMsg" class="msgline"></div>
   </div>
 
   <div class="card" data-tab="settings">
-    <strong>Kid lock</strong>
-    <div id="pinStatus" style="font-size:14px;color:#4d535e;margin:8px 0;"></div>
+    <strong>↕️ Arrange the tabs</strong>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Choose the order of the tab cards across the top of the Portal. It applies straight away.</div>
+    <div id="tabOrderBox"></div>
+    <button class="ghost" style="width:100%;margin-top:8px;" onclick="saveTabOrder(DEFAULT_TAB_ORDER)">Back to the default order</button>
+    <div id="tabOrderMsg" class="msgline"></div>
+  </div>
+
+  <div class="card" data-tab="settings">
+    <strong>🔒 Kid lock</strong>
+    <div id="pinStatus" style="font-size:14px;color:var(--ink2);margin:8px 0;"></div>
     <div class="row2">
       <input type="text" id="pinInput" placeholder="4-digit PIN" maxlength="4" inputmode="numeric"
              autocomplete="off" style="margin:0;">
       <button class="ghost" style="flex:none;" onclick="setPin()">Set PIN</button>
       <button class="ghost" style="flex:none;" onclick="clearPin()">Remove</button>
     </div>
-    <div style="font-size:13px;color:#737983;margin-top:6px;">With a PIN set, adding events, opening Settings, and deleting lists on the Portal's touchscreen ask for it. Kids can still check off chores and list items. This page stays unlocked.</div>
+    <div style="font-size:13px;color:var(--muted);margin-top:6px;">With a PIN set, adding events, opening Settings, and deleting lists on the Portal's touchscreen ask for it. Kids can still check off chores and list items. This page stays unlocked.</div>
     <div id="pinMsg" class="msgline"></div>
   </div>
 
   <div class="card" data-tab="settings">
-    <strong>Weather</strong>
-    <div id="wxStatus" style="font-size:14px;color:#4d535e;margin:8px 0;"></div>
+    <strong>☀️ Weather</strong>
+    <div id="wxStatus" style="font-size:14px;color:var(--ink2);margin:8px 0;"></div>
     <div class="row2">
       <input type="text" id="wxQ" placeholder="City or ZIP code" autocomplete="off" style="margin:0;"
              onkeydown="if(event.key==='Enter')wxSearch()">
@@ -502,7 +590,7 @@
     </div>
     <div id="wxResults"></div>
     <div class="row2" style="align-items:center;">
-      <span style="font-size:14px;color:#737983;">Units:</span>
+      <span style="font-size:14px;color:var(--muted);">Units:</span>
       <button id="wxF" class="ghost" style="flex:1;" onclick="wxUnit('f')">°F</button>
       <button id="wxC" class="ghost" style="flex:1;" onclick="wxUnit('c')">°C</button>
     </div>
@@ -510,17 +598,17 @@
   </div>
 
   <div class="card" data-tab="settings">
-    <strong>Display size <span id="scaleVal" style="color:#f0584c;"></span></strong>
+    <strong>🔎 Display size <span id="scaleVal" style="color:#f0584c;"></span></strong>
     <input type="range" id="scaleSlider" min="70" max="160" step="5"
            style="width:100%;margin-top:12px;accent-color:#f0584c;">
-    <div style="display:flex;justify-content:space-between;font-size:12px;color:#9aa0a8;">
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--faint);">
       <span>70%</span><span>100%</span><span>160%</span>
     </div>
-    <div style="font-size:13px;color:#737983;margin-top:8px;">Watch the Portal while you drag — it zooms live, then sharpens when you let go. 100% suits the Portal+; the 10″ Portal usually looks best at 110–125%.</div>
+    <div style="font-size:13px;color:var(--muted);margin-top:8px;">Watch the Portal while you drag — it zooms live, then sharpens when you let go. 100% suits the Portal+; the 10″ Portal usually looks best at 110–125%.</div>
   </div>
 
   <div class="card" data-tab="settings">
-    <strong>Board layout</strong>
+    <strong>📐 Board layout</strong>
     <label for="weekStart" style="margin-top:10px;">Week starts on</label>
     <select id="weekStart" style="width:100%;" onchange="saveLayout()">
       <option value="0">Locale default</option>
@@ -548,14 +636,24 @@
       <option value="auto">Auto (dark at night)</option>
       <option value="system">Match system</option>
     </select>
-    <div style="font-size:13px;color:#737983;margin-top:8px;">Mount the Portal sideways? Pick Portrait, or pick Auto-rotate and just turn it — the board flips and reflows to match.</div>
+    <label for="soundsOn" style="margin-top:10px;">Sound effects (the accident siren and "womps")</label>
+    <select id="soundsOn" style="width:100%;" onchange="saveLayout()">
+      <option value="1">On</option>
+      <option value="0">Off</option>
+    </select>
+    <label for="sidebarOn" style="margin-top:10px;">Side panel (clock, weather, today)</label>
+    <select id="sidebarOn" style="width:100%;" onchange="saveLayout()">
+      <option value="1">Show</option>
+      <option value="0">Hide: the calendar gets the whole screen</option>
+    </select>
+    <div style="font-size:13px;color:var(--muted);margin-top:8px;">Mount the Portal sideways? Pick Portrait, or pick Auto-rotate and just turn it — the board flips and reflows to match.</div>
     <div id="layoutMsg" class="msgline"></div>
   </div>
 
   <div class="card" data-tab="settings">
-    <strong>Backup &amp; copy to another Portal</strong>
-    <p style="font-size:13px;color:#737983;margin:6px 0 10px;">Export everything — calendars, members, chores, lists, meals, layout, <em>and</em> your connected accounts &amp; API key — as one code. Paste it into another Portal's setup page to clone this one.</p>
-    <p style="font-size:13px;color:#737983;margin:0 0 10px;">The code is <strong>encrypted with a passphrase you choose</strong> (10+ characters). <strong>If you forget the passphrase the backup can't be opened</strong> — there is no reset. Old plain backups can still be imported.</p>
+    <strong>💾 Backup &amp; copy to another Portal</strong>
+    <p style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Export everything — calendars, members, chores, lists, meals, layout, <em>and</em> your connected accounts &amp; API key — as one code. Paste it into another Portal's setup page to clone this one.</p>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 10px;">The code is <strong>encrypted with a passphrase you choose</strong> (10+ characters). <strong>If you forget the passphrase the backup can't be opened</strong> — there is no reset. Old plain backups can still be imported.</p>
     <input type="password" id="cfgPass" placeholder="Passphrase (10+ characters)" autocomplete="new-password" style="margin:0 0 8px;">
     <button class="ghost" style="width:100%;" onclick="exportConfig()">Export this Portal's config</button>
     <textarea id="cfgBlob" placeholder="Exported code appears here — or paste one to import" style="width:100%;height:90px;margin-top:10px;font-family:monospace;font-size:12px;"></textarea>
@@ -563,9 +661,17 @@
     <div id="cfgMsg" class="msgline"></div>
   </div>
 
+  <div class="card" data-tab="settings" style="border-color:var(--err);">
+    <strong>⚠️ Reset PortalHub</strong>
+    <p style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Erases <strong>everything</strong> on this Portal: members, chores, points, rewards, lists, calendars, connected accounts and every setting. It goes back to a fresh install. <strong>Make a backup first</strong> (the Backup card above). This cannot be undone.</p>
+    <input type="text" id="resetWord" placeholder="Type RESET to enable" autocomplete="off">
+    <button style="width:100%;background:var(--err);" onclick="resetPortal()">Erase everything</button>
+    <div id="resetMsg" class="msgline"></div>
+  </div>
+
   <div class="card" data-tab="settings">
-    <strong>Two-way sync</strong>
-    <p style="font-size:13px;color:#737983;margin:6px 0 10px;">Connect an account so events can be added from this page. Events are created in the real calendar, so they sync to everyone's devices.</p>
+    <strong>🔁 Two-way sync</strong>
+    <p style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Connect an account so events can be added from this page. Events are created in the real calendar, so they sync to everyone's devices.</p>
 
     <div style="font-weight:600;">iCloud</div>
     <div id="icDisconnected" style="display:none;">
@@ -573,7 +679,7 @@
       <input type="text" id="icEmail" placeholder="name@icloud.com" autocomplete="off">
       <label for="icPass">App-specific password</label>
       <input type="text" id="icPass" placeholder="xxxx-xxxx-xxxx-xxxx" autocomplete="off">
-      <div style="font-size:13px;color:#737983;margin-bottom:10px;">Create one at <a href="https://account.apple.com" target="_blank" rel="noopener">account.apple.com</a> → Sign-In and Security → App-Specific Passwords. It's stored on the Portal only and can be revoked anytime.</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">Create one at <a href="https://account.apple.com" target="_blank" rel="noopener">account.apple.com</a> → Sign-In and Security → App-Specific Passwords. It's stored on the Portal only and can be revoked anytime.</div>
       <button class="ghost" style="width:100%;" onclick="connectIcloud()">Connect iCloud</button>
     </div>
     <div id="icConnected" style="display:none;font-size:14px;margin:8px 0;">
@@ -582,7 +688,7 @@
     </div>
     <div id="icMsg" class="msgline"></div>
 
-    <div style="font-weight:600;margin-top:12px;border-top:1px solid #efece4;padding-top:14px;">Google Calendar</div>
+    <div style="font-weight:600;margin-top:12px;border-top:1px solid var(--line);padding-top:14px;">Google Calendar</div>
     <div id="gDisconnected" style="display:none;">
       <details style="margin:6px 0 10px;">
         <summary style="font-size:14px;">One-time Google Cloud setup (~5 min)</summary>
@@ -600,7 +706,7 @@
       <button class="ghost" style="width:100%;" onclick="googleBegin()">Get sign-in link</button>
       <div id="gStep2" style="display:none;">
         <div style="font-size:14px;margin:12px 0 4px;">1. <a id="gAuthLink" href="#" target="_blank" rel="noopener"><strong>Sign in with Google</strong></a> as the calendar's owner and allow access.</div>
-        <div style="font-size:13px;color:#737983;margin-bottom:6px;">2. You'll land on a "site can't be reached" <code>localhost</code> page — copy that page's <em>full address</em> from the address bar and paste it here:</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">2. You'll land on a "site can't be reached" <code>localhost</code> page — copy that page's <em>full address</em> from the address bar and paste it here:</div>
         <input type="text" id="gCode" placeholder="http://localhost:8090/oauth?code=…" autocomplete="off">
         <button class="ghost" style="width:100%;" onclick="googleFinish()">Finish connecting</button>
       </div>
@@ -621,14 +727,14 @@
   <div class="card" data-tab="calendar">
     <details>
       <summary>Google Calendar — get the secret address</summary>
-      <p style="font-size:14px;color:#4d535e;margin:8px 0 6px;"><strong>Do it all on a computer</strong> — this page works there too, so the long link never has to touch your phone:</p>
+      <p style="font-size:14px;color:var(--ink2);margin:8px 0 6px;"><strong>Do it all on a computer</strong> — this page works there too, so the long link never has to touch your phone:</p>
       <ol>
         <li>On the computer, open this same page: go to <code class="selfurl"></code> in any browser.</li>
         <li>In another tab, open <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">calendar.google.com → Settings</a>, signed in as the family member.</li>
         <li>Under “Settings for my calendars”, click their calendar → <strong>Integrate calendar</strong>.</li>
         <li>Copy <strong>“Secret address in iCal format”</strong> (ends in <code>basic.ics</code>) and paste it in the form here.</li>
       </ol>
-      <p style="font-size:13px;color:#737983;margin:6px 0 2px;">Phone-only alternative: open the settings link above in Safari (long-press → Open in Safari if the Google app grabs it), tap <strong>aA → Request Desktop Website</strong>, then follow steps 3–4.</p>
+      <p style="font-size:13px;color:var(--muted);margin:6px 0 2px;">Phone-only alternative: open the settings link above in Safari (long-press → Open in Safari if the Google app grabs it), tap <strong>aA → Request Desktop Website</strong>, then follow steps 3–4.</p>
     </details>
     <details>
       <summary>Apple / iCloud Calendar — get the link</summary>
@@ -638,7 +744,7 @@
         <li>Turn on <strong>Public Calendar</strong>, tap <strong>Share Link…</strong> → <strong>Copy</strong>.</li>
         <li>Come back here and paste it above (<code>webcal://…</code> links are fine).</li>
       </ol>
-      <ol style="border-top:1px solid #21262d; padding-top:10px;">
+      <ol style="border-top:1px solid var(--line); padding-top:10px;">
         <li>Only calendars the person owns in iCloud can be shared this way — the built-in Birthdays/Holidays calendars can't, and a Google account synced into the iPhone should use the Google steps instead.</li>
       </ol>
     </details>
@@ -650,18 +756,18 @@
         <li>Under <strong>Share with anyone</strong>, choose <strong>Create link</strong>. Pick <strong>Full view</strong> so event titles show (Limited view only shows busy times).</li>
         <li><strong>Copy link</strong> and paste it above.</li>
       </ol>
-      <p style="font-size:13px;color:#737983;margin:6px 0 2px;">Proton has no way for other apps to add or edit events, so Proton calendars are <strong>read-only</strong> here; events you add from the Portal go to a connected iCloud or Google calendar instead. Proton can take up to 8 hours to publish changes. Anyone with the link can see the calendar, so treat it like a password. If it stops updating, make a new link and replace the old one.</p>
+      <p style="font-size:13px;color:var(--muted);margin:6px 0 2px;">Proton has no way for other apps to add or edit events, so Proton calendars are <strong>read-only</strong> here; events you add from the Portal go to a connected iCloud or Google calendar instead. Proton can take up to 8 hours to publish changes. Anyone with the link can see the calendar, so treat it like a password. If it stops updating, make a new link and replace the old one.</p>
     </details>
     <details>
       <summary>Magic words — send things from any calendar</summary>
-      <p style="font-size:14px;color:#4d535e;margin:8px 0 6px;">Create a calendar event anywhere (your phone, work laptop…) with one of these titles, and the Portal hides it from the calendar and routes it instead:</p>
+      <p style="font-size:14px;color:var(--ink2);margin:8px 0 6px;">Create a calendar event anywhere (your phone, work laptop…) with one of these titles, and the Portal hides it from the calendar and routes it instead:</p>
       <ol>
         <li><code>todo: pick up dry cleaning</code> → the "To-Do" list</li>
         <li><code>groceries: oat milk</code> → the "Groceries" list</li>
         <li><code>chore: Chani water the plants</code> → a one-time chore on the event's date — a family member's name in the text assigns it to them</li>
       </ol>
-      <p style="font-size:13px;color:#737983;margin:6px 0 2px;">Typos are forgiven ("groceres:" still finds Groceries), lists are created automatically if they don't exist, and each event is processed once — it stays in your real calendar as a record. The Portal sees it on its next feed sync (within ~15 min).</p>
-      <p style="font-size:14px;color:#4d535e;margin:8px 0 2px;"><strong>Even better:</strong> add a dedicated <em>Inbox</em> calendar (see "Add a calendar"). In an Inbox, no prefixes are needed — plain phrases like <code>add oat milk to groceries</code>, <code>buy batteries</code>, or <code>remind Chani to water the plants</code> just work, and nothing from it ever shows on the board.</p>
+      <p style="font-size:13px;color:var(--muted);margin:6px 0 2px;">Typos are forgiven ("groceres:" still finds Groceries), lists are created automatically if they don't exist, and each event is processed once — it stays in your real calendar as a record. The Portal sees it on its next feed sync (within ~15 min).</p>
+      <p style="font-size:14px;color:var(--ink2);margin:8px 0 2px;"><strong>Even better:</strong> add a dedicated <em>Inbox</em> calendar (see "Add a calendar"). In an Inbox, no prefixes are needed — plain phrases like <code>add oat milk to groceries</code>, <code>buy batteries</code>, or <code>remind Chani to water the plants</code> just work, and nothing from it ever shows on the board.</p>
     </details>
     <details>
       <summary>Good to know</summary>
@@ -786,8 +892,9 @@ async function saveSaver(){
 }
 
 const TAB_LABELS = {calendar:'Calendar', chores:'Chores & stars', lists:'Lists', meals:'Meals',
-  routines:'Routines (kids\' get-ready checklists)', potty:'Potty tracker (dry-night streak toward 3 weeks)',
-  shopping:'Shopping list (parent-locked on the board)'};
+  routines:'Get Ready (kids\' routine checklists, follows the time of day)', potty:'🚽 Pee Tracker (dry-night streak toward 3 weeks)',
+  shopping:'Shopping list (parent-locked on the board)',
+  rewards:'💰 Reward Shop 💰 (kids pick prizes with their points)'};
 
 function renderFeatures(f){
   document.getElementById('featRow').innerHTML = Object.keys(TAB_LABELS).map(k =>
@@ -845,8 +952,8 @@ async function loadPottyKids(){
   try {
     const st = await (await fetch('/api/potty')).json();
     const box = document.getElementById('pottyKidsBox');
-    box.innerHTML = '<strong style="font-size:14px;">Potty tracker: who uses it?</strong>'
-      + '<div style="font-size:13px;color:#737983;margin:4px 0 6px;">Nobody is on the tracker until you tick them. Unticking someone removes them from the board but keeps their history.</div>'
+    box.innerHTML = '<strong style="font-size:14px;">🚽 Pee Tracker: who uses it?</strong>'
+      + '<div style="font-size:13px;color:var(--muted);margin:4px 0 6px;">Nobody is on the tracker until you tick them. Unticking someone removes them from the board but keeps their history.</div>'
       + (st.everyone || []).map(m => `<label style="display:flex;align-items:center;gap:10px;font-size:15px;margin:6px 0;">
           <input type="checkbox" data-id="${esc(m.id)}" ${m.enabled ? 'checked' : ''} onchange="savePottyKids()" style="width:20px;height:20px;flex:none;"> ${esc(m.name)}</label>`).join('');
   } catch(e){ /* optional section */ }
@@ -856,7 +963,7 @@ async function savePottyKids(){
   try {
     const r = await fetch('/api/potty', {method:'POST', body: JSON.stringify({action:'setKids', memberIds: ids})});
     if (!r.ok) throw new Error((await r.json()).error || 'failed');
-    show('featMsg', 'Potty tracker people updated', true);
+    show('featMsg', 'Pee Tracker people updated', true);
   } catch(e){ show('featMsg', e.message, false); loadPottyKids(); }
 }
 
@@ -892,7 +999,7 @@ function renderShopping(){
   document.getElementById('shopItems').innerHTML = items.map(i => `
     <div class="cal-row">
       <input type="checkbox" ${i.done ? 'checked' : ''} data-id="${esc(i.id)}" onchange="shopAct({action:'toggle',id:this.dataset.id})" style="width:20px;height:20px;flex:none;">
-      <div class="grow"><div class="cal-name" style="${i.done ? 'text-decoration:line-through;color:#9aa0a8;' : ''}">${esc(i.name)}</div></div>
+      <div class="grow"><div class="cal-name" style="${i.done ? 'text-decoration:line-through;color:var(--faint);' : ''}">${esc(i.name)}</div></div>
       <button class="del" data-id="${esc(i.id)}" onclick="shopAct({action:'delete',id:this.dataset.id})" aria-label="Remove">✕</button>
     </div>`).join('') || '<div class="empty">Nothing to buy</div>';
 }
@@ -901,17 +1008,29 @@ async function loadEffects(){
   try {
     const st = await (await fetch('/api/effects')).json();
     document.getElementById('fxToggle').checked = st.enabled;
+    document.getElementById('fxPotty').checked = st.potty;
+    document.getElementById('fxRoutines').checked = st.routines;
+    document.getElementById('fxPenalty').checked = st.penalty;
   } catch(e){ /* page still usable without it */ }
 }
 
 async function toggleEffects(){
   const t = document.getElementById('fxToggle');
   try {
-    const r = await fetch('/api/effects', {method:'POST', body: JSON.stringify({enabled: t.checked})});
+    const r = await fetch('/api/effects', {method:'POST', body: JSON.stringify({enabled: t.checked,
+      potty: document.getElementById('fxPotty').checked, routines: document.getElementById('fxRoutines').checked, penalty: document.getElementById('fxPenalty').checked})});
     const body = await r.json();
     if (!r.ok) throw new Error(body.error || 'failed');
-    msg(t.checked ? 'Celebrations on' : 'Celebrations off', true);
-  } catch(e){ t.checked = !t.checked; msg(e.message, false); }
+    msg('Celebration settings saved', true);
+  } catch(e){ msg(e.message, false); loadEffects(); }
+}
+
+async function previewFx(kind){
+  try {
+    const r = await fetch('/api/effects', {method:'POST', body: JSON.stringify({preview: kind})});
+    if (!r.ok) throw new Error((await r.json()).error || 'failed');
+    msg('Playing on the Portal…', true);
+  } catch(e){ msg(e.message, false); }
 }
 
 function applySync(st){
@@ -1120,6 +1239,19 @@ scaleSlider.addEventListener('change', async () => {
 
 // ----- tabs -----
 let currentTabName = 'calendar';
+function applyThemeLabel(){
+  const light = document.documentElement.dataset.theme === 'light';
+  const b = document.getElementById('themeBtn'); if (b) b.textContent = light ? '🌙 Dark' : '☀️ Light';
+  const m = document.getElementById('themeColor'); if (m) m.content = light ? '#f0584c' : '#121418';
+}
+function toggleTheme(){
+  const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem('portalhub-theme', t); } catch(e){}
+  applyThemeLabel();
+}
+applyThemeLabel();
+
 function showTab(name){
   currentTabName = name;
   document.querySelectorAll('[data-tab]').forEach(el =>
@@ -1163,7 +1295,7 @@ function renderListsP(){
       ${items.map(it => `
         <div class="cal-row" style="cursor:pointer;" onclick="listAct({action:'toggleItem',listId:'${esc(l.id)}',itemId:'${esc(it.id)}'})">
           <div class="dot" style="background:${it.done ? '#f0584c' : 'transparent'};border:2px solid ${it.done ? '#f0584c' : '#c9c4b8'};"></div>
-          <div class="grow" style="${it.done ? 'color:#a3a8b0;text-decoration:line-through;' : ''}">${esc(it.text)}</div>
+          <div class="grow" style="${it.done ? 'color:var(--faint);text-decoration:line-through;' : ''}">${esc(it.text)}</div>
           <button class="del" onclick="event.stopPropagation();listAct({action:'deleteItem',listId:'${esc(l.id)}',itemId:'${esc(it.id)}'})">✕</button>
         </div>`).join('')}
       <div class="row2" style="margin:8px 0 0;">
@@ -1219,27 +1351,6 @@ const DOW = [{n:'S',v:1},{n:'M',v:2},{n:'T',v:3},{n:'W',v:4},{n:'T',v:5},{n:'F',
 let choreDays = [2,3,4,5,6]; // default school days
 let choreStatus = null;
 
-const CHORE_BANK = [
-  ['🛏️','Make the bed'],['📚','Homework'],['🐕','Feed the pet'],
-  ['🍽️','Set the table'],['🥣','Clear the dishes'],['🧺','Put laundry away'],
-  ['🧸','Tidy your room'],['🗑️','Take out the trash'],
-  ['🎵','Practice music'],['🪴','Water the plants']];
-
-function renderChoreBank(){
-  const learned = (choreStatus && choreStatus.suggestions) || [];
-  const picks = learned.map(s => [s.icon, s.title]);
-  CHORE_BANK.forEach(([icon, title]) => {
-    if (!picks.some(([, t]) => t.toLowerCase() === title.toLowerCase())) picks.push([icon, title]);
-  });
-  document.getElementById('choreBank').innerHTML = picks.map(([icon, title], i) =>
-    `<button class="ghost" style="padding:8px 12px;font-size:13px;${i < learned.length ? 'border:1px solid #f0584c;' : ''}"
-             onclick="pickBank('${icon}', ${JSON.stringify(title)})">${icon} ${esc(title)}</button>`).join('');
-}
-function pickBank(icon, title){
-  document.getElementById('chIcon').value = icon;
-  document.getElementById('chTitle').value = title;
-}
-
 function renderChoreSchedule(){
   const once = document.getElementById('chMode').value === 'once';
   document.getElementById('chDays').style.display = once ? 'none' : 'flex';
@@ -1281,14 +1392,14 @@ function renderChores(){
         <input type="number" value="${goal}" min="1" max="99" style="width:64px;margin:0;padding:6px;"
                onchange="choreAct({action:'setGoal',memberId:'${esc(m.id)}',goal:parseInt(this.value)||10})">
       </div>
-      <div style="background:#efece4;border-radius:6px;height:10px;margin-top:6px;overflow:hidden;">
+      <div style="background:var(--line);border-radius:6px;height:10px;margin-top:6px;overflow:hidden;">
         <div style="background:${esc(m.color)};width:${pct}%;height:100%;"></div>
       </div>
       <div style="display:flex;gap:6px;margin-top:8px;">
         ${[-5,-1,1,5].map(n => `<button class="ghost" style="flex:1;padding:8px 0;" onclick="adjustPts('${esc(m.id)}',${n})">${n > 0 ? '+' : '−'}${Math.abs(n)}</button>`).join('')}
       </div>
       ${(st.rewards || []).length ? `<div style="display:flex;gap:6px;margin-top:8px;align-items:center;">
-        <span style="font-size:13px;color:#737983;flex:none;">🎁 ${st.spendable[m.id] || 0} to spend</span>
+        <span style="font-size:13px;color:var(--muted);flex:none;">🎁 ${st.spendable[m.id] || 0} to spend</span>
         <select data-spend="${esc(m.id)}" style="margin:0;flex:1;">${st.rewards.map(r => `<option value="${esc(r.id)}">${esc(r.icon)} ${esc(r.name)} (${r.cost})</option>`).join('')}</select>
         <button class="ghost" style="flex:none;padding:8px 12px;" data-m="${esc(m.id)}" onclick="spendPts(this.dataset.m)">Spend</button>
       </div>` : ''}
@@ -1296,7 +1407,7 @@ function renderChores(){
   }).join('') || '<div class="empty">Add family members first (Family tab)</div>';
 
   document.getElementById('ptHistory').innerHTML = (st.adjustments || []).length
-    ? '<div style="font-size:13px;color:#737983;margin:12px 0 4px;">Changes this week</div>' + st.adjustments.map(a => `
+    ? '<div style="font-size:13px;color:var(--muted);margin:12px 0 4px;">Changes this week</div>' + st.adjustments.map(a => `
       <div class="cal-row">
         <div class="grow">
           <div class="cal-name">${esc(memberName(a.memberId))}: ${a.kind === 'redeem' ? '🎁 spent ' + a.cost : (a.delta > 0 ? '+' : '') + a.delta}</div>
@@ -1307,13 +1418,19 @@ function renderChores(){
 
   const lw = (st.lastWeek && st.lastWeek.results || []).filter(r => r.earned > 0);
   document.getElementById('lastWeek').innerHTML = lw.length
-    ? '<div style="font-size:13px;color:#737983;margin-bottom:4px;">🏆 Last week (' + esc(st.lastWeek.start) + ')</div>'
+    ? '<div style="font-size:13px;color:var(--muted);margin-bottom:4px;">🏆 Last week (' + esc(st.lastWeek.start) + ')</div>'
       + lw.map((r, i) => `<div style="display:flex;gap:8px;padding:3px 0;"><span>${['🥇','🥈','🥉'][i] || '•'}</span><span style="flex:1;">${esc(r.name)}</span><span>${r.earned} pts${r.hitGoal ? ' ✓' : ''}</span></div>`).join('')
     : '';
 
+  renderProfiles(st);
+  renderRewardIdeas(st);
+
+  // Every field saves when you leave it, so a reward is edited in place.
   document.getElementById('rewardBox').innerHTML = (st.rewards || []).map(r => `
-    <div class="cal-row"><span style="font-size:20px;">${esc(r.icon)}</span>
-      <div class="grow"><div class="cal-name">${esc(r.name)}</div><div class="cal-url">${r.cost} points</div></div>
+    <div class="cal-row" data-rw="${esc(r.id)}" style="gap:6px;">
+      <input type="text" class="rwi" value="${esc(r.icon)}" maxlength="4" style="width:46px;margin:0;padding:6px;flex:none;text-align:center;" onchange="rwSave(this)" aria-label="Emoji">
+      <input type="text" class="rwn" value="${esc(r.name)}" maxlength="40" style="margin:0;padding:6px;min-width:0;" onchange="rwSave(this)" aria-label="Reward name">
+      <input type="number" class="rwc" value="${r.cost}" min="1" max="99" style="width:58px;margin:0;padding:6px;flex:none;" onchange="rwSave(this)" aria-label="Points">
       <button class="del" data-id="${esc(r.id)}" onclick="choreAct({action:'deleteReward',id:this.dataset.id})" aria-label="Remove">✕</button>
     </div>`).join('') || '<div class="empty">No rewards yet</div>';
 
@@ -1352,11 +1469,17 @@ function renderChores(){
   }).join('');
   document.getElementById('chMembers').innerHTML = chips;
   document.getElementById('starterMembers').innerHTML = chips;
+  document.getElementById('profMembers').innerHTML = chips;
 }
 
 let choreSelMembers = [];
-const EXAMPLE_REWARDS = [['📺','Extra screen time (30 min)',8],['🎬','Pick the family movie',10],
-  ['🍦','Ice cream treat',6],['🌙','Stay up 15 min late',5],['🧸','Small toy',15]];
+function rwSave(el){
+  const row = el.closest('[data-rw]');
+  const name = row.querySelector('.rwn').value.trim();
+  if (!name) { show('choreMsg', 'A reward needs a name', false); return loadChores(); }
+  choreAct({action:'updateReward', id: row.dataset.rw, name,
+    icon: row.querySelector('.rwi').value.trim() || '🎁', cost: parseInt(row.querySelector('.rwc').value) || 1});
+}
 function addReward(){
   const name = document.getElementById('rwName').value.trim();
   if (!name) return show('choreMsg', 'Name the reward', false);
@@ -1364,15 +1487,122 @@ function addReward(){
     icon: document.getElementById('rwIcon').value.trim() || '🎁'});
   document.getElementById('rwName').value = '';
 }
-async function addExampleRewards(){
-  const have = new Set((choreStatus.rewards || []).map(r => r.name.toLowerCase()));
-  for (const [icon, name, cost] of EXAMPLE_REWARDS)
-    if (!have.has(name.toLowerCase())) await choreAct({action:'addReward', icon, name, cost});
+function toggleIdeas(){
+  const el = document.getElementById('rewardIdeas');
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+function renderRewardIdeas(st){
+  const have = new Set((st.rewards || []).map(r => r.name.toLowerCase()));
+  const cats = [...new Set((st.rewardIdeas || []).map(i => i.category))];
+  document.getElementById('rewardIdeas').innerHTML =
+    '<div style="font-size:13px;color:var(--muted);margin-bottom:6px;">Tick the ones you want, then add. You can change any cost afterwards.</div>'
+    + cats.map(c => `<div style="font-weight:600;margin:10px 0 2px;">${esc(c)}</div>` + st.rewardIdeas.filter(i => i.category === c).map(i => {
+        const got = have.has(i.name.toLowerCase());
+        return `<label class="cal-row" style="cursor:pointer;opacity:${got ? .55 : 1};">
+          <input type="checkbox" class="ideaChk" data-name="${esc(i.name)}" ${got ? 'checked disabled' : ''} style="width:20px;height:20px;flex:none;">
+          <span style="font-size:20px;">${esc(i.icon)}</span>
+          <div class="grow"><div class="cal-name">${esc(i.name)}</div></div>
+          <span style="font-size:12px;color:var(--muted);">${got ? '✓ added' : i.cost + ' pts'}</span></label>`; }).join('')).join('')
+    + `<div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="ghost" style="flex:1;" onclick="document.querySelectorAll('.ideaChk:not(:disabled)').forEach(c => c.checked = true)">Tick all</button>
+        <button style="flex:1;" onclick="addSelectedIdeas()">Add ticked rewards</button></div>`;
+}
+async function addSelectedIdeas(){
+  const names = [...document.querySelectorAll('.ideaChk:checked:not(:disabled)')].map(c => c.dataset.name);
+  if (!names.length) return show('choreMsg', 'Tick at least one reward', false);
+  await choreAct({action:'addRewardPack', names});
+  show('choreMsg', '✓ Added ' + names.length + ' reward' + (names.length === 1 ? '' : 's'), true);
 }
 function spendPts(memberId){
   const sel = document.querySelector(`select[data-spend="${CSS.escape(memberId)}"]`);
   choreAct({action:'redeem', memberId, rewardId: sel.value});
 }
+let profSelId = '';
+function renderProfiles(st){
+  const ps = st.profiles || [];
+  if (!ps.some(p => p.id === profSelId)) profSelId = ps.length ? ps[0].id : '';
+  document.getElementById('profSel').innerHTML = ps.map(p =>
+    `<option value="${esc(p.id)}" ${p.id === profSelId ? 'selected' : ''}>${esc(p.name)} · ${p.items.length} chores</option>`).join('');
+  document.getElementById('profFrom').innerHTML = (st.members || []).map(m =>
+    `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
+  renderProfileDetail();
+  renderProfileEditor(st);
+}
+function renderProfileDetail(){
+  const p = ((choreStatus && choreStatus.profiles) || []).find(x => x.id === profSelId);
+  document.getElementById('profDetail').textContent = p ? p.items.map(i => i.icon + ' ' + i.title + ' (' + i.points + ')').join(' · ') : '';
+  document.getElementById('profDelBtn').style.display = p ? '' : 'none';
+}
+async function applyProfile(){
+  if (!profSelId) return;
+  if (!choreSelMembers.length) return show('choreMsg', 'Pick at least one person', false);
+  await choreAct({action:'applyProfile', profileId: profSelId, memberIds: choreSelMembers});
+  show('choreMsg', '✓ Profile applied', true);
+}
+function deleteProfile(){ if (profSelId && confirm('Delete this profile?')) choreAct({action:'deleteProfile', id: profSelId}); }
+async function saveProfile(){
+  const name = document.getElementById('profName').value.trim();
+  if (!name) return show('choreMsg', 'Give the profile a name', false);
+  await choreAct({action:'saveProfile', name, memberId: document.getElementById('profFrom').value});
+  document.getElementById('profName').value = '';
+}
+// ----- chore profile editor -----
+let peDraft = {id:'', name:'', items:[]};
+const PE_DAYS = [[1,'S'],[2,'M'],[3,'T'],[4,'W'],[5,'T'],[6,'F'],[7,'S']];
+function peBlankItem(){ return {title:'', icon:'⭐', points:1, days:[1,2,3,4,5,6,7]}; }
+function peLoad(id){
+  const p = ((choreStatus && choreStatus.profiles) || []).find(x => x.id === id);
+  peDraft = p ? JSON.parse(JSON.stringify({id:p.id, name:p.name, items:p.items})) : {id:'', name:'', items:[peBlankItem()]};
+  peRender();
+}
+function peNew(){ peDraft = {id:'', name:'', items:[peBlankItem()]}; peRender(); }
+function peRender(){
+  document.getElementById('peName').value = peDraft.name;
+  document.getElementById('peSel').value = peDraft.id;
+  document.getElementById('peItems').innerHTML = peDraft.items.map((it, i) => `
+    <div style="border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:8px;">
+      <div class="row2" style="margin:0 0 6px;">
+        <input type="text" value="${esc(it.icon)}" maxlength="4" style="margin:0;flex:none;width:56px;text-align:center;" oninput="peSet(${i},'icon',this.value)">
+        <input type="text" value="${esc(it.title)}" placeholder="Chore name" maxlength="40" style="margin:0;" oninput="peSet(${i},'title',this.value)">
+        <button class="del" onclick="peDelItem(${i})" aria-label="Remove chore">✕</button>
+      </div>
+      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+        <select style="margin:0;width:auto;" onchange="peSet(${i},'points',parseInt(this.value))">
+          ${[1,2,3,4,5,6,7,8,9,10].map(n => `<option value="${n}" ${n === it.points ? 'selected' : ''}>${n} pt${n > 1 ? 's' : ''}</option>`).join('')}
+        </select>
+        ${PE_DAYS.map(([d, l]) => `<button class="${it.days.includes(d) ? '' : 'ghost'}" style="padding:6px 0;width:30px;" onclick="peDay(${i},${d})">${l}</button>`).join('')}
+      </div>
+    </div>`).join('') || '<div class="empty">No chores yet</div>';
+}
+function peSet(i, k, v){ peDraft.items[i][k] = v; }
+function peDay(i, d){
+  const a = peDraft.items[i].days, j = a.indexOf(d);
+  if (j >= 0) a.splice(j, 1); else a.push(d);
+  peRender();
+}
+function peAddItem(){ peDraft.items.push(peBlankItem()); peRender(); }
+function peDelItem(i){ peDraft.items.splice(i, 1); peRender(); }
+function renderProfileEditor(st){
+  const ps = st.profiles || [];
+  const sel = document.getElementById('peSel');
+  sel.innerHTML = '<option value="">New profile…</option>' + ps.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+  // Keep unsaved edits unless the profile being edited was deleted.
+  if (peDraft.id && !ps.some(p => p.id === peDraft.id)) peDraft = {id:'', name:'', items:[]};
+  if (!peDraft.id && !peDraft.items.length && !peDraft.name) { if (ps.length) { peLoad(ps[0].id); return; } peDraft.items = [peBlankItem()]; }
+  peRender();
+}
+async function peSave(){
+  const name = peDraft.name.trim();
+  if (!name) return show('choreMsg', 'Give the profile a name', false);
+  await choreAct({action:'saveProfileFull', id: peDraft.id, name, items: peDraft.items});
+  const saved = (choreStatus.profiles || []).find(p => p.name.toLowerCase() === name.toLowerCase());
+  if (saved) { peLoad(saved.id); show('choreMsg', '✓ Profile saved', true); }
+}
+function peDelete(){
+  if (!peDraft.id) return;
+  if (confirm('Delete the profile “' + peDraft.name + '”?')) choreAct({action:'deleteProfile', id: peDraft.id});
+}
+
 const starterOff = new Set(); // starter chores the user unticked
 function toggleStarter(title, on){ if (on) starterOff.delete(title); else starterOff.add(title); }
 function adjustPts(id, delta){
@@ -1394,7 +1624,7 @@ function toggleChoreMember(id){
 async function loadChores(){
   try {
     choreStatus = await (await fetch('/api/chores')).json();
-    renderChores(); renderDayChips(); renderChoreBank(); renderChoreSchedule();
+    renderChores(); renderDayChips(); renderChoreSchedule();
   }
   catch(e){ show('choreMsg', e.message, false); }
 }
@@ -1489,7 +1719,7 @@ function renderRoutines(){
       <span style="font-size:20px;">${esc(c.icon || '✅')}</span>
       <div class="grow">
         <div class="cal-name">${esc(c.title)}</div>
-        <div class="cal-url">${sec} ${esc(routineMemberName(c.memberId))} · ${esc(days)}</div>
+        <div class="cal-url">${sec} ${esc(routineMemberName(c.memberId))} · ${esc(days)}${c.chore ? ' · ⭐ checks off “' + esc(c.chore) + '”' : ''}</div>
       </div>
       <button class="del" onclick="routineAct({action:'deleteItem',itemId:'${esc(c.id)}'})">✕</button>
     </div>`;
@@ -1514,6 +1744,15 @@ async function loadRoutines(){
   try {
     routineStatus = await (await fetch('/api/routines')).json();
     renderRoutines(); renderRoutineDayChips(); renderRoutineBank(); renderRoutineSchedule();
+    // Offer the family's chore names so an item can be linked to one explicitly.
+    try {
+      const ch = await (await fetch('/api/chores')).json();
+      const titles = [...new Set((ch.chores || []).map(c => c.title))].sort();
+      const sel = document.getElementById('rtChore'), keep = sel.value;
+      sel.innerHTML = '<option value="@auto">Also check off the chore with the same name</option><option value="">Don\'t link to a chore</option>'
+        + titles.map(t => `<option value="${esc(t)}">Check off “${esc(t)}”</option>`).join('');
+      sel.value = [...sel.options].some(o => o.value === keep) ? keep : '@auto';
+    } catch(e){ /* the link picker is optional */ }
   }
   catch(e){ show('routineMsg', e.message, false); }
 }
@@ -1535,6 +1774,7 @@ function addRoutine(){
   const action = {action:'addItem', title,
     icon: document.getElementById('rtIcon').value,
     section: document.getElementById('rtSection').value,
+    chore: document.getElementById('rtChore').value,
     memberIds: routineSelMembers};
   if (once) {
     action.oneTime = true;
@@ -1581,12 +1821,12 @@ function renderMeals(){
   }).join('') + `<datalist id="recipeNames">${mealState.recipes.map(r => `<option value="${esc(r.title)}">`).join('')}</datalist>`;
 
   document.getElementById('recipeBox').innerHTML = mealState.recipes.map(r => `
-    <details style="border-bottom:1px solid #efece4;padding:6px 0;">
+    <details style="border-bottom:1px solid var(--line);padding:6px 0;">
       <summary style="display:flex;align-items:center;gap:8px;">
         <span class="grow" style="flex:1;font-weight:600;">${esc(r.title)}</span>
         <button class="del" onclick="event.preventDefault();mealAct({action:'deleteRecipe',recipeId:'${esc(r.id)}'})">✕</button>
       </summary>
-      <div style="font-size:14px;color:#4d535e;white-space:pre-wrap;margin:6px 0 4px;">${esc(r.ingredients || '')}${r.ingredients && r.steps ? '\n\n' : ''}${esc(r.steps || '')}</div>
+      <div style="font-size:14px;color:var(--ink2);white-space:pre-wrap;margin:6px 0 4px;">${esc(r.ingredients || '')}${r.ingredients && r.steps ? '\n\n' : ''}${esc(r.steps || '')}</div>
     </details>`).join('') || '<div class="empty">No recipes yet</div>';
 }
 
@@ -2030,21 +2270,21 @@ const WIZ_STEPS = [
         <code>groceries: oat milk</code> from anywhere lands straight on the list.</div>
       </div>
       <div class="card">
-        <strong>Routines <span style="font-size:12px;color:#737983;">(optional)</span></strong>
-        <div class="wiz-sub" style="margin:6px 0 8px;">A separate <strong>Routines</strong> tab
+        <strong>Get Ready <span style="font-size:12px;color:var(--muted);">(optional)</span></strong>
+        <div class="wiz-sub" style="margin:6px 0 8px;">A separate <strong>Get Ready</strong> tab
         for the kids' get-ready checklists — pack homework, lunch, brush teeth — grouped by
         morning / evening. They tick each one off and it resets the next day. No stars, just
         a list to finish. Off by default so it never clutters the board.</div>
         <label style="display:flex;align-items:center;gap:10px;font-size:15px;">
           <input type="checkbox" id="wizRoutines" style="width:20px;height:20px;flex:none;">
-          Add the Routines tab to my board
+          Add the Get Ready tab to my board
         </label>
       </div>
       <div class="card">
         <strong>Parents stay in charge</strong>
         <div class="wiz-sub" style="margin:6px 0 0;">A <strong>kid lock</strong> PIN
         (Settings) gates adding and deleting things on the touchscreen, and Settings
-        also lets you switch whole tabs off (or on, like Routines) any time.</div>
+        also lets you switch whole tabs off (or on, like Get Ready) any time.</div>
       </div>`,
     onShow: async () => {
       try {
@@ -2071,7 +2311,7 @@ const WIZ_STEPS = [
       completely hidden and everything else works normally.</div>
       <div class="card">
         <input type="text" id="wizAiKey" placeholder="Paste a Google AI API key (AIza…)" autocomplete="off">
-        <div style="font-size:13px;color:#737983;">Free at
+        <div style="font-size:13px;color:var(--muted);">Free at
           <a href="https://aistudio.google.com" target="_blank" rel="noopener">aistudio.google.com</a>
           → Get API key. Stored on the Portal only. Leave empty to skip.</div>
         <div id="wizAiMsg" class="msgline"></div>
@@ -2094,17 +2334,17 @@ const WIZ_STEPS = [
         <strong>When the Portal is idle</strong>
         <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;margin-top:10px;">
           <input type="radio" name="wizIdle" value="takeover" style="width:20px;height:20px;flex:none;margin-top:2px;">
-          <span>Keep showing the calendar<br><span style="font-size:13px;color:#8b949e;">A true always-on wall display. Tap ✕ to leave. Note: this disables the Portal's screensaver entirely — for other apps too, until you switch it back.</span></span>
+          <span>Keep showing the calendar<br><span style="font-size:13px;color:var(--faint);">A true always-on wall display. Tap ✕ to leave. Note: this disables the Portal's screensaver entirely — for other apps too, until you switch it back.</span></span>
         </label>
         <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;margin-top:10px;">
           <input type="radio" name="wizIdle" value="yield" style="width:20px;height:20px;flex:none;margin-top:2px;">
           <span>Let the screensaver run after
             <input type="number" id="wizIdleMins" min="1" max="120" value="10" style="width:52px;padding:2px 6px;"> min
-            <br><span style="font-size:13px;color:#8b949e;">Gentler on the screen; tap to return to the board. Leaves your screensaver working normally.</span></span>
+            <br><span style="font-size:13px;color:var(--faint);">Gentler on the screen; tap to return to the board. Leaves your screensaver working normally.</span></span>
         </label>
         <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;margin-top:10px;">
           <input type="radio" name="wizIdle" value="off" style="width:20px;height:20px;flex:none;margin-top:2px;">
-          <span>Off<br><span style="font-size:13px;color:#8b949e;">Your normal screensaver runs as usual once you exit the calendar.</span></span>
+          <span>Off<br><span style="font-size:13px;color:var(--faint);">Your normal screensaver runs as usual once you exit the calendar.</span></span>
         </label>
       </div>
       <div class="card">
@@ -2169,15 +2409,15 @@ const WIZ_STEPS = [
       <div class="card">
         <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;">
           <input type="radio" name="wizSync" value="solo" style="width:20px;height:20px;flex:none;margin-top:2px;" checked>
-          <span>Just this one<br><span style="font-size:13px;color:#8b949e;">No syncing (default).</span></span>
+          <span>Just this one<br><span style="font-size:13px;color:var(--faint);">No syncing (default).</span></span>
         </label>
         <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;margin-top:10px;">
           <input type="radio" name="wizSync" value="hub" style="width:20px;height:20px;flex:none;margin-top:2px;">
-          <span>This is the main one (hub)<br><span style="font-size:13px;color:#8b949e;">The others will follow it.</span></span>
+          <span>This is the main one (hub)<br><span style="font-size:13px;color:var(--faint);">The others will follow it.</span></span>
         </label>
         <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;margin-top:10px;">
           <input type="radio" name="wizSync" value="spoke" style="width:20px;height:20px;flex:none;margin-top:2px;">
-          <span>Follow another Portal<br><span style="font-size:13px;color:#8b949e;">Finds the hub automatically; or type its address below.</span></span>
+          <span>Follow another Portal<br><span style="font-size:13px;color:var(--faint);">Finds the hub automatically; or type its address below.</span></span>
         </label>
         <input type="text" id="wizSyncHub" placeholder="Hub address (optional, e.g. 192.168.1.42)"
                autocomplete="off" style="margin-top:10px;">
@@ -2209,7 +2449,7 @@ const WIZ_STEPS = [
           <code>groceries: oat milk</code> or <code>chore: water the plants</code>
           goes to the right place instead of the calendar.</li>
           <li><strong>Chores &amp; stars, lists, meals</strong> (and optional
-          <strong>routines</strong>) each have a tab on the board and here — switch any of
+          <strong>get ready</strong>) each have a tab on the board and here — switch any of
           them on or off under Settings → Board tabs.</li>
           <li><strong>Add this page to your home screen</strong> (Share → Add to Home
           Screen) and it opens like an app.</li>
@@ -2326,7 +2566,7 @@ async function wizRenderIcloud(){
     : `
       <input type="text" id="wizIcEmail" placeholder="Apple ID (name@icloud.com)" autocomplete="off">
       <input type="text" id="wizIcPass" placeholder="App-specific password (xxxx-xxxx-xxxx-xxxx)" autocomplete="off">
-      <div style="font-size:13px;color:#737983;margin-bottom:10px;">Create one at
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">Create one at
         <a href="https://account.apple.com" target="_blank" rel="noopener">account.apple.com</a>
         → Sign-In and Security → App-Specific Passwords. Stored on the Portal only.</div>
       <button class="ghost" style="width:100%;" onclick="wizConnectIcloud()">Connect iCloud</button>
@@ -2380,14 +2620,56 @@ async function loadLayout(){
     document.getElementById('defaultView').value = l.defaultView;
     document.getElementById('orientation').value = l.orientation;
     document.getElementById('theme').value = l.theme;
+    document.getElementById('sidebarOn').value = l.sidebar ? '1' : '0';
+    document.getElementById('soundsOn').value = l.sounds ? '1' : '0';
+    tabOrder = l.tabOrder || DEFAULT_TAB_ORDER.slice(); renderTabOrder();
   } catch(e){}
+}
+const DEFAULT_TAB_ORDER = ['calendar','chores','lists','meals','routines','potty','shopping','rewards'];
+const TAB_SHORT = {calendar:'📅 Calendar', chores:'✅ Chores', lists:'📝 Lists', meals:'🍽️ Meals', routines:'⏰ Get Ready',
+  potty:'🚽 Pee Tracker', shopping:'🛒 Shopping', rewards:'💰 Reward Shop 💰'};
+let tabOrder = DEFAULT_TAB_ORDER.slice();
+function renderTabOrder(){
+  document.getElementById('tabOrderBox').innerHTML = tabOrder.map((k, i) => `
+    <div class="cal-row"><div class="grow"><div class="cal-name">${esc(TAB_SHORT[k] || k)}</div></div>
+      <button class="ghost" style="padding:6px 12px;flex:none;" ${i === 0 ? 'disabled' : ''} onclick="moveTab(${i},-1)" aria-label="Move up">▲</button>
+      <button class="ghost" style="padding:6px 12px;flex:none;" ${i === tabOrder.length - 1 ? 'disabled' : ''} onclick="moveTab(${i},1)" aria-label="Move down">▼</button>
+    </div>`).join('');
+}
+function moveTab(i, d){
+  const o = tabOrder.slice(), j = i + d;
+  if (j < 0 || j >= o.length) return;
+  o.splice(j, 0, o.splice(i, 1)[0]);
+  saveTabOrder(o);
+}
+async function saveTabOrder(order){
+  try {
+    const r = await fetch('/api/layout', {method:'POST', body: JSON.stringify({tabOrder: order})});
+    const l = await r.json();
+    if (!r.ok) throw new Error(l.error || 'failed');
+    tabOrder = l.tabOrder; renderTabOrder();
+  } catch(e){ show('tabOrderMsg', e.message, false); }
+}
+async function resetPortal(){
+  const word = document.getElementById('resetWord').value.trim();
+  if (word !== 'RESET') return show('resetMsg', 'Type RESET (all capitals) first', false);
+  if (!confirm('Erase EVERYTHING on this Portal? This cannot be undone.')) return;
+  try {
+    const r = await fetch('/api/reset', {method:'POST', body: JSON.stringify({confirm: word})});
+    const b = await r.json();
+    if (!r.ok) throw new Error(b.error || 'failed');
+    show('resetMsg', '✓ Reset. The Portal is a fresh install again — reloading…', true);
+    setTimeout(() => location.reload(), 1500);
+  } catch(e){ show('resetMsg', e.message, false); }
 }
 async function saveLayout(){
   const body = {
     weekStart: parseInt(document.getElementById('weekStart').value),
     defaultView: parseInt(document.getElementById('defaultView').value),
     orientation: document.getElementById('orientation').value,
-    theme: document.getElementById('theme').value
+    theme: document.getElementById('theme').value,
+    sidebar: document.getElementById('sidebarOn').value === '1',
+    sounds: document.getElementById('soundsOn').value === '1'
   };
   try {
     const r = await fetch('/api/layout', {method:'POST', body: JSON.stringify(body)});
