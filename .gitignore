@@ -8,3 +8,5 @@ local.properties
 captures/
 core/target/
 app/src/main/jniLibs/
+*.apk
+*.apk.sha256

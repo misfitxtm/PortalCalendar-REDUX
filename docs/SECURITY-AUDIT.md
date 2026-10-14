@@ -14,6 +14,9 @@ Method: code reading plus on-device curl checks. No fuzzing yet, and the Rust pa
 | Unbounded feed download could exhaust the heap | 10 MB cap |
 | iCloud password, Google tokens and the Gemini key stored in plain SharedPreferences | Sealed with a non-exportable Android Keystore AES-GCM key; existing plain values are sealed on first start |
 | Backup export was base64, not encrypted | Passphrase-encrypted (AES-256-GCM, PBKDF2-HMAC-SHA256, 210k iterations, header authenticated, iteration count capped on import). Old plain backups still import |
+| Calendar feed parsing (an untrusted download) ran in a Java library with no limits on hostile input | Replaced by a Rust parser (`core/src/ics.rs`): input, line, event, instance and recurrence-work caps, a wall-clock deadline, panics contained per event. A mutation fuzzer (1.5M inputs) found a library panic on a non-ASCII `BYDAY` and rules that never match but stall the search; both fixed. Compared with the old parser on generated and real feeds; the only difference is a fix (an all-day series' `UNTIL` date is inclusive) |
+| Hub-and-spoke sync had no way to sign in to the hub | Pairing code sent as a Bearer token, kept sealed; a paired Portal only talks to the typed hub address, never to one found over mDNS, so a rogue advertiser can't harvest the code |
+| Release builds were debug-signed and debuggable | Release APKs signed with a dedicated key held outside the repo (`docs/RELEASING.md`); `debuggable` is off |
 | Restoring a backup wiped the pairing token, desyncing the running server | Import now preserves the token |
 | `adb backup` could extract app data (`allowBackup` defaulted on) | `allowBackup="false"` |
 | Gemini key sent in the URL query | Moved to the `x-goog-api-key` header |
@@ -25,9 +28,9 @@ Method: code reading plus on-device curl checks. No fuzzing yet, and the Rust pa
 |---|---|---|
 | Low | The pairing token and the hub-to-spoke mirror bundle are not encrypted at rest/in transit (the token is on screen in the QR code by design) | TLS, later |
 | Low | Keystore key is not tied to a screen lock, so code running as the app (or root) can still use it | Acceptable on a wall display |
-| Medium | FamilySync: spokes can't authenticate to the hub; a future hub token must not be sent to an unverified mDNS-discovered address | Pair by entering the hub's address and token explicitly |
-| Low | Cleartext HTTP on the LAN exposes the cookie to a sniffer | Local TLS, later |
-| Low | Debug-signed, debuggable build: anyone with an authorized adb can read app data | Release keystore for real use |
+| Low | Cleartext HTTP on the LAN exposes the sign-in cookie and the Portal-to-hub pairing code to a sniffer | Local TLS, later |
+| Low | Fuzzing is mutation-only (no coverage guidance) because this machine has no C++ compiler for libFuzzer | Run `cargo fuzz` after installing `gcc-c++` |
+| Low | The pairing code is the hub's full pairing token, so a paired Portal can do anything the hub's phone page can | A narrower per-Portal credential |
 | Low | `config.html` builds `onclick` strings from ids; a malicious imported backup could inject script | Use data attributes plus event delegation; validate ids on import |
 | Low | Rust server: no read timeouts or connection cap (slow-loris after auth) | Swap the HTTP layer if exposure grows |
 | Low | Token never rotates | "Reset token" button |

@@ -83,6 +83,8 @@ object Chores {
 
         val weekStart = weekStartStr()
         val (stars, spent, adjustments) = weekTotals(ctx, chores, done, weekStart)
+        val prevStart = LocalDate.parse(weekStart).minusDays(7).toString()
+        val lastWeek = lastWeekJson(ctx, chores, done, prevStart, weekStart)
         val spendable = JSONObject()
         for (k in stars.keys()) spendable.put(k, (stars.optInt(k) - spent.optInt(k)).coerceAtLeast(0))
 
@@ -102,6 +104,10 @@ object Chores {
             .put("spendable", spendable)
             .put("rewards", Data.readArray(ctx, REWARDS))
             .put("weekStart", weekStart)
+            .put("lastWeek", lastWeek)
+            .put("recapDue", lastWeek.getJSONArray("results").let { r ->
+                (0 until r.length()).any { r.getJSONObject(it).getInt("earned") > 0 }
+            } && Rules.recapDue(LocalDate.now(), ConfigStore(ctx).recapDismissed()))
             .put("starter", JSONArray().also { out ->
                 STARTER.forEach { out.put(JSONObject().put("icon", it.icon).put("title", it.title)
                     .put("points", it.points).put("days", JSONArray(it.days))) }
@@ -116,8 +122,9 @@ object Chores {
      * This week's points per member: earned (completions + bonus/penalty, floored at 0), spent on
      * rewards, and the adjustment log newest-first. Redemptions are log entries with kind "redeem".
      */
-    private fun weekTotals(ctx: Context, chores: JSONArray, done: JSONArray, weekStart: String):
+    private fun weekTotals(ctx: Context, chores: JSONArray, done: JSONArray, weekStart: String, weekEnd: String? = null):
             Triple<JSONObject, JSONObject, JSONArray> {
+        fun inWeek(date: String) = date >= weekStart && (weekEnd == null || date < weekEnd)
         val choreMember = HashMap<String, String>()
         for (i in 0 until chores.length()) {
             val c = chores.getJSONObject(i)
@@ -128,7 +135,7 @@ object Chores {
         fun add(o: JSONObject, m: String, n: Int) { if (m.isNotEmpty()) o.put(m, o.optInt(m, 0) + n) }
         for (i in 0 until done.length()) {
             val d = done.getJSONObject(i)
-            if (d.optString("date") >= weekStart) {
+            if (inWeek(d.optString("date"))) {
                 // Stamped memberId first (survives chore prune/delete);
                 // fall back to the chore lookup for pre-stamp log entries.
                 val m = d.optString("memberId")
@@ -141,13 +148,29 @@ object Chores {
         val adj = Data.readArray(ctx, POINTS)
         for (i in adj.length() - 1 downTo 0) {
             val a = adj.getJSONObject(i)
-            if (a.optString("date") < weekStart) continue
+            if (!inWeek(a.optString("date"))) continue
             if (a.optString("kind") == "redeem") add(spent, a.optString("memberId"), a.optInt("cost"))
             else add(stars, a.optString("memberId"), a.optInt("delta"))
             adjustments.put(a)
         }
         for (k in stars.keys().asSequence().toList()) stars.put(k, stars.optInt(k).coerceAtLeast(0))
         return Triple(stars, spent, adjustments)
+    }
+
+    /** Last week's earned points per member, best first, and whether each hit their goal. */
+    private fun lastWeekJson(ctx: Context, chores: JSONArray, done: JSONArray, from: String, to: String): JSONObject {
+        val (stars, _, _) = weekTotals(ctx, chores, done, from, to)
+        val goals = HashMap<String, Int>()
+        Data.readArray(ctx, GOALS).let { g ->
+            for (i in 0 until g.length()) goals[g.getJSONObject(i).optString("memberId")] = g.getJSONObject(i).optInt("goal", DEFAULT_GOAL)
+        }
+        val rows = Members.all(ctx).map { m ->
+            val earned = stars.optInt(m.id)
+            val goal = goals[m.id] ?: DEFAULT_GOAL
+            JSONObject().put("memberId", m.id).put("name", m.name).put("earned", earned)
+                .put("goal", goal).put("hitGoal", earned >= goal)
+        }.sortedByDescending { it.getInt("earned") }
+        return JSONObject().put("start", from).put("end", to).put("results", JSONArray(rows))
     }
 
     /** The family's frequently re-added chores, fuzzy-grouped, active ones excluded. */
@@ -334,6 +357,12 @@ object Chores {
                             .put("days", JSONArray(st.days)))
                     }
                 }
+            }
+            "dismissRecap" -> {
+                // Local to this device, so it is not forwarded to a hub.
+                ConfigStore(ctx).setRecapDismissed(weekStartStr())
+                App.instance.notifyDataChanged()
+                return statusJson(ctx)
             }
             "setGoal" -> {
                 val mid = action.getString("memberId")

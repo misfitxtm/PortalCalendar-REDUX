@@ -18,4 +18,7 @@ object PortalCore {
     /** Throws IllegalStateException if the port is taken or the token is too short. */
     @JvmStatic external fun start(addr: String, token: String, handler: NativeHandler): Long
     @JvmStatic external fun stop(handle: Long)
+
+    /** Parses an .ics feed natively; returns JSON (see IcsEvents). */
+    @JvmStatic external fun parseIcs(text: String, windowStartMs: Long, windowEndMs: Long, deviceTz: String): String
 }

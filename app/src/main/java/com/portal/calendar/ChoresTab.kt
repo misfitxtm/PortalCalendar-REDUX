@@ -31,10 +31,12 @@ class ChoresTab(
     /** Fired when a card is *checked off* (not un-done); [goalReached] when this star hit the weekly goal. */
     private val onCelebrate: (anchor: View, goalReached: Boolean) -> Unit = { _, _ -> },
     /** Tap on a member's points badge: parent adds or removes points. */
-    private val onAdjust: (anchor: View, memberId: String, name: String) -> Unit = { _, _, _ -> }
+    private val onAdjust: (anchor: View, memberId: String, name: String) -> Unit = { _, _, _ -> },
+    private val onDismissRecap: () -> Unit = {}
 ) {
 
     private lateinit var columnsRow: LinearLayout
+    private var recapView: View? = null
     val view: LinearLayout = build()
 
     private fun dp(v: Int): Int = (v * ctx.resources.displayMetrics.density).roundToInt()
@@ -85,6 +87,9 @@ class ChoresTab(
             .format(todayCal.time)
 
         columnsRow.removeAllViews()
+        recapView?.let { (it.parent as? android.view.ViewGroup)?.removeView(it) }
+        recapView = null
+        if (status.optBoolean("recapDue")) addRecap(status.getJSONObject("lastWeek"))
 
         if (chores.length() == 0) {
             columnsRow.addView(TextView(ctx).apply {
@@ -234,6 +239,47 @@ class ChoresTab(
                 leftMargin = dp(5); rightMargin = dp(5)
             })
         }
+    }
+
+    /** "Last week" banner on the first days of a new points week; the ✕ hides it for the week. */
+    private fun addRecap(last: JSONObject) {
+        val results = last.getJSONArray("results")
+        val medals = listOf("🥇", "🥈", "🥉")
+        val bar = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(CARD, 16)
+            setPadding(dp(16), dp(10), dp(8), dp(10))
+        }
+        bar.addView(TextView(ctx).apply {
+            text = "🏆 Last week"
+            textSize = 15f
+            setTextColor(INK)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(16) })
+        val line = (0 until results.length()).map { results.getJSONObject(it) }
+            .filter { it.getInt("earned") > 0 }
+            .mapIndexed { i, r ->
+                "${medals.getOrElse(i) { "•" }} ${r.getString("name")} ${r.getInt("earned")}" +
+                    if (r.getBoolean("hitGoal")) " ✓" else ""
+            }.joinToString("    ")
+        bar.addView(TextView(ctx).apply {
+            text = line
+            textSize = 15f
+            setTextColor(INK)
+            maxLines = 2
+            ellipsize = TextUtils.TruncateAt.END
+        }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        bar.addView(TextView(ctx).apply {
+            text = "✕"
+            textSize = 18f
+            setTextColor(MUTED)
+            gravity = Gravity.CENTER
+            minimumWidth = dp(44); minimumHeight = dp(40)
+            setOnClickListener { onDismissRecap() }
+        })
+        recapView = bar
+        view.addView(bar, 1, lp(bottom = dp(12)))
     }
 
     // ------------------------------------------------------------ helpers

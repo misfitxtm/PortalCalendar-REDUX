@@ -77,6 +77,13 @@ class ConfigStore(ctx: Context) {
         featureEnabled(it, default = it in setOf("calendar", "chores", "lists", "meals"))
     }
 
+    /** The points-week start whose recap card was dismissed, so it doesn't reappear that week. */
+    fun recapDismissed(): String? = prefs.getString("recap_dismissed", null)
+
+    fun setRecapDismissed(weekStart: String) {
+        prefs.edit().putString("recap_dismissed", weekStart).commit()
+    }
+
     /** Voice commands are completely off (no mic button, no recording, no model) until a parent turns them on. */
     fun voiceEnabled(): Boolean = prefs.getBoolean("voice_enabled", false)
 

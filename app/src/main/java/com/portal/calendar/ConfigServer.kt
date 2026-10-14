@@ -300,7 +300,8 @@ class ConfigServer(
             FamilySync.setConfig(ctx,
                 if (o.has("role")) o.getString("role") else null,
                 if (o.has("manualHub")) o.getString("manualHub") else null,
-                if (o.has("mirrorAll")) o.getBoolean("mirrorAll") else null)
+                if (o.has("mirrorAll")) o.getBoolean("mirrorAll") else null,
+                if (o.has("hubToken")) o.getString("hubToken") else null)
             json(FamilySync.statusJson(ctx))
         }
         // Served by a hub to its spokes: raw shared family files (no secrets).

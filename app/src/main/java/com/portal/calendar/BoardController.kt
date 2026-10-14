@@ -1712,7 +1712,8 @@ class BoardController(private val baseCtx: Context) {
                 }
             },
             onCelebrate = { anchor, goalReached -> celebrateAt(anchor, goalReached) },
-            onAdjust = { anchor, memberId, name -> requirePin { showAdjustMenu(anchor, memberId, name) } })
+            onAdjust = { anchor, memberId, name -> requirePin { showAdjustMenu(anchor, memberId, name) } },
+            onDismissRecap = { runCatching { Chores.mutate(ctx, org.json.JSONObject().put("action", "dismissRecap")) } })
         area.addView(choresTab.view, FrameLayout.LayoutParams(MATCH, MATCH))
         mealsTab = MealsTab(ctx, { title, body ->
             detailTitle.text = title
@@ -1736,7 +1737,7 @@ class BoardController(private val baseCtx: Context) {
                 }
             })
         area.addView(routinesTab.view, FrameLayout.LayoutParams(MATCH, MATCH))
-        pottyTab = PottyTab(ctx) { action -> requirePin(action) }
+        pottyTab = PottyTab(ctx, onCelebrate = { anchor, big -> celebrateAt(anchor, big) }) { action -> requirePin(action) }
         area.addView(pottyTab.view, FrameLayout.LayoutParams(MATCH, MATCH))
         shoppingTab = ShoppingTab(ctx)
         area.addView(shoppingTab.view, FrameLayout.LayoutParams(MATCH, MATCH))

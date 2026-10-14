@@ -2,7 +2,7 @@
 //! Only reachable on-device; the logic worth testing lives in gate.rs / server.rs.
 use crate::server::{Handler, Response, Server};
 use jni::objects::{GlobalRef, JByteArray, JClass, JObject, JString, JValue};
-use jni::sys::jlong;
+use jni::sys::{jlong, jstring};
 use jni::{JNIEnv, JavaVM};
 use std::sync::Arc;
 
@@ -78,6 +78,28 @@ pub extern "system" fn Java_com_portal_calendar_PortalCore_start(
             0
         }
     }
+}
+
+/// Parses an .ics feed to JSON (see `ics::Parsed::to_json`). Never unwinds into the JVM.
+#[no_mangle]
+pub extern "system" fn Java_com_portal_calendar_PortalCore_parseIcs<'l>(
+    mut env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    text: JString<'l>,
+    window_start: jlong,
+    window_end: jlong,
+    device_tz: JString<'l>,
+) -> jstring {
+    let json = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<String, String> {
+        let text: String = env.get_string(&text).map_err(|e| e.to_string())?.into();
+        let tz: String = env.get_string(&device_tz).map_err(|e| e.to_string())?.into();
+        let tz = tz.parse::<chrono_tz::Tz>().unwrap_or(chrono_tz::UTC);
+        let win = crate::ics::Window { start_ms: window_start, end_ms: window_end };
+        Ok(crate::ics::parse(text.as_bytes(), win, tz).to_json())
+    }))
+    .unwrap_or_else(|_| Err("internal error".into()))
+    .unwrap_or_else(|e| format!("{{\"events\":[],\"skipped\":0,\"tzFallbacks\":0,\"error\":{}}}", serde_json::Value::String(e)));
+    env.new_string(json).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut())
 }
 
 #[no_mangle]
