@@ -23,12 +23,13 @@ import kotlin.math.roundToInt
  */
 class PottyTab(
     private val ctx: Context,
-    /** Fired when marking a day reaches a milestone; [big] for the 3-week goal. */
-    private val onCelebrate: (anchor: android.view.View, big: Boolean) -> Unit = { _, _ -> },
+    /** Fired when a recent day is marked dry; [milestone] when that reached 3, 7, 14 or 21 days. */
+    private val onCelebrate: (name: String, streak: Int, milestone: Boolean) -> Unit = { _, _, _ -> },
+    /** Asks "are you sure?" (and the parent PIN) before something drastic; runs [action] if confirmed. */
+    private val onConfirm: (title: String, message: String, button: String, action: () -> Unit) -> Unit = { _, _, _, a -> a() },
     private val onGate: (action: () -> Unit) -> Unit
 ) {
     private var selected = ""
-    private var streakAnchor: android.view.View? = null
     private var month: YearMonth = YearMonth.now()
     val view: LinearLayout = LinearLayout(ctx).apply {
         orientation = LinearLayout.VERTICAL
@@ -45,7 +46,7 @@ class PottyTab(
         val today = LocalDate.parse(status.getString("today"))
 
         view.addView(TextView(ctx).apply {
-            text = "POTTY TRACKER"
+            text = "🚽 PEE TRACKER"
             textSize = 13f
             setTextColor(ACCENT)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
@@ -53,7 +54,7 @@ class PottyTab(
         }, lp(bottom = dp(10)))
 
         if (members.length() == 0) {
-            view.addView(note("Nobody is set up for the potty tracker.\nPick who uses it on your phone: Settings → Board tabs."))
+            view.addView(note("Nobody is set up for the pee tracker.\nPick who uses it on your phone: Settings → Board tabs."))
             return
         }
         val list = (0 until members.length()).map { members.getJSONObject(it) }
@@ -93,7 +94,6 @@ class PottyTab(
         val streak = me.getInt("streak")
         val card = card()
         card.addView(TextView(ctx).apply {
-            streakAnchor = this
             text = "🔥 $streak"
             textSize = 54f
             setTextColor(INK)
@@ -123,7 +123,14 @@ class PottyTab(
             background = rounded(if (earned) color else PILL, 14)
             setPadding(dp(10), dp(5), dp(10), dp(5))
         }, LinearLayout.LayoutParams(WRAP, WRAP).apply { setMargins(dp(3), 0, dp(3), 0) })
-        card.addView(chips, lp(bottom = dp(8)))
+        card.addView(chips, lp(bottom = dp(4)))
+        card.addView(TextView(ctx).apply {
+            val toGo = Rules.DRY_BONUS_DAYS - streak % Rules.DRY_BONUS_DAYS
+            text = "⭐ +${Rules.DRY_BONUS_STARS} bonus stars every ${Rules.DRY_BONUS_DAYS} dry days" + " · $toGo to go"
+            textSize = 12f
+            setTextColor(MUTED)
+            gravity = Gravity.CENTER
+        }, lp(bottom = dp(8)))
         card.addView(TextView(ctx).apply {
             val next = Rules.nextPottyMilestone(streak)
             text = if (next == null) "🎉 3 weeks dry — amazing!"
@@ -145,11 +152,28 @@ class PottyTab(
         row.addView(action("💧 Wet today", WET) { mark(me, today, "wet") },
             LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(6) })
         card.addView(row, lp())
+        // Drastic, so it asks first: resets the streak, this week's marks and this week's points.
+        card.addView(TextView(ctx).apply {
+            text = "😠 Accident while awake"
+            textSize = 15f
+            setTextColor(OOPS)
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply { cornerRadius = dp(18).toFloat(); setStroke(dp(2), OOPS) }
+            minimumHeight = dp(48)
+            setPadding(dp(8), dp(10), dp(8), dp(10))
+            setOnClickListener {
+                val n = me.getString("name")
+                onConfirm("Accident while awake?",
+                    "This starts $n's whole week over: the dry-night streak goes to 0, this week's marks are cleared, and this week's chore points go to 0.",
+                    "Reset the week") { markNow(me, today, "awake") }
+            }
+        }, lp(top = dp(10)))
         return card
     }
 
     private fun calendarCard(me: JSONObject, today: LocalDate): LinearLayout {
         val days = me.getJSONObject("days")
+        val awakeDays = me.getJSONArray("awake").let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }
         val card = card()
         val nav = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         fun arrow(t: String, delta: Long) = TextView(ctx).apply {
@@ -192,18 +216,19 @@ class PottyTab(
                 if (dayNum in 1..month.lengthOfMonth()) {
                     val date = month.atDay(dayNum)
                     val state = if (days.has(date.toString())) days.getBoolean(date.toString()) else null
+                    val oops = awakeDays.contains(date.toString())
                     val future = date.isAfter(today)
-                    cell.text = when (state) { true -> "✓"; false -> "💧"; null -> "$dayNum" }
+                    cell.text = if (oops) "😠" else when (state) { true -> "✓"; false -> "💧"; null -> "$dayNum" }
                     cell.textSize = 17f
                     cell.setTextColor(if (state != null) Color.WHITE else if (future) MUTED else INK)
                     cell.background = GradientDrawable().apply {
                         cornerRadius = dp(10).toFloat()
-                        setColor(when (state) { true -> DRY; false -> WET; null -> if (future) Color.TRANSPARENT else PILL })
+                        setColor(if (oops) OOPS else when (state) { true -> DRY; false -> WET; null -> if (future) Color.TRANSPARENT else PILL })
                         if (date == today) setStroke(dp(2), ACCENT)
                     }
                     if (!future) cell.setOnClickListener {
-                        // none → dry → wet → none
-                        mark(me, date, when (state) { null -> "dry"; true -> "wet"; false -> "clear" })
+                        // none → dry → wet → none (an awake accident is cleared with one tap)
+                        mark(me, date, if (oops) "clear" else when (state) { null -> "dry"; true -> "wet"; false -> "clear" })
                     }
                 }
                 line.addView(cell, LinearLayout.LayoutParams(0, MATCH, 1f).apply { setMargins(dp(2), dp(2), dp(2), dp(2)) })
@@ -211,7 +236,7 @@ class PottyTab(
             card.addView(line, LinearLayout.LayoutParams(MATCH, 0, 1f))
         }
         card.addView(TextView(ctx).apply {
-            text = "Tap a day to mark it: dry ✓ → wet 💧 → clear"
+            text = "Tap a day to mark it: dry ✓ → wet 💧 → clear.  😠 = accident while awake"
             textSize = 12f
             setTextColor(MUTED)
             gravity = Gravity.CENTER
@@ -219,7 +244,10 @@ class PottyTab(
         return card
     }
 
-    private fun mark(me: JSONObject, date: LocalDate, state: String) = onGate {
+    private fun mark(me: JSONObject, date: LocalDate, state: String) = onGate { markNow(me, date, state) }
+
+    /** Applies a mark; the caller has already cleared the PIN (and any confirmation). */
+    private fun markNow(me: JSONObject, date: LocalDate, state: String) {
         val before = me.getInt("streak")
         runCatching {
             Potty.mutate(ctx, JSONObject().put("action", "mark").put("memberId", me.getString("id"))
@@ -228,9 +256,8 @@ class PottyTab(
             val after = JSONObject(status).getJSONArray("members").let { a ->
                 (0 until a.length()).map { a.getJSONObject(it) }.firstOrNull { it.getString("id") == me.getString("id") }
             }?.getInt("streak") ?: return@onSuccess
-            Rules.pottyMilestoneReached(before, after)?.let { m ->
-                streakAnchor?.let { onCelebrate(it, m == Rules.POTTY_GOAL_DAYS) }
-            }
+            val recent = !date.isBefore(LocalDate.now().minusDays(1)) // back-filling an old day isn't worth a party
+            if (state == "dry" && recent) onCelebrate(me.optString("name"), after, Rules.pottyMilestoneReached(before, after) != null)
         }
     }
 
@@ -270,6 +297,7 @@ class PottyTab(
         private const val WRAP = LinearLayout.LayoutParams.WRAP_CONTENT
         private val DRY = Color.parseColor("#2BB3A3")
         private val WET = Color.parseColor("#4FA3E3")
+        private val OOPS = Color.parseColor("#D9453D")
         private val CARD get() = Palette.CARD
         private val PILL get() = Palette.PILL
         private val INK get() = Palette.INK

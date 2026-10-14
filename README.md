@@ -23,12 +23,42 @@ screenshots. This fork keeps their MIT license and copyright in [LICENSE](LICENS
 **Features**
 - **Chore points:** add or remove points (bonus or penalty, with a reason and undo), points per
   chore, a starter chore list, and a weekly reset every Friday.
-- **Rewards:** a prize list kids can spend this week's points on.
+- **💰 Reward Shop 💰:** a gold tab on the board where a kid picks a prize and a parent approves it with
+  the PIN. 26 ready-made rewards to add (screen time, treats, activities, privileges, prizes), with
+  costs you can change. Spending uses this week's points, which reset every Friday. On the setup page
+  every reward's emoji, name and cost can be edited in place. The board's shop is a gold marquee with
+  gift and money emoji, and the rewards a kid can afford glow gold with a "Get it!" button.
+- **Celebrations:** finishing a Get Ready list, or marking a dry night in the Pee Tracker, plays a
+  full-screen party: a bouncing trophy or star, confetti and a rising power-up jingle (a synthesized
+  chiptune run, not a recording). Each can be switched off, and previewed, on the setup page under
+  Settings → Celebrations.
+- **"Ouch" screen:** taking points off a kid (from the board or the setup page) shows a full-screen dark
+  red screen: a skull hops up and falls off the bottom, "−5 ⭐" shakes in, and a sad game-over tune plays
+  (also synthesized). It has its own on/off switch and Preview button next to the celebrations.
+- **Get Ready (optional):** each kid's routine checklist that follows the clock: morning until noon,
+  afternoon until 5, then evening. Chips let you look at another part of the day, a progress bar shows
+  how much is done, and finishing the list celebrates. An item can be linked to a chore: ticking "Make
+  bed" in Get Ready checks off that kid's "Make the bed" chore (and its points) too.
 - **Friday recap:** the first days of a new points week show last week's points per kid.
-- **Potty tracker (optional):** a dry-night streak toward 3 weeks with milestones at 3, 7, 14 and 21
-  days, and a month calendar. You choose which kids use it.
+- **🚽 Pee Tracker (optional):** a dry-night streak toward 3 weeks with milestones at 3, 7, 14 and 21
+  days, and a month calendar. You choose which kids use it. An "Accident while awake" button (parent
+  PIN, with a confirmation) starts that kid's whole week over: streak, this week's marks and this week's
+  chore points go to zero, and the board plays an angry reaction with a siren and three falling "womps"
+  (switch the sounds off in Settings → Layout). Every 7 straight dry days earns +5 bonus stars.
 - **Shopping list (optional):** quick-add household items or type your own. Locked behind the parent
   PIN on the board.
+- **Chore profiles:** the "Add a chore" window offers age profiles (Ages 4–6, 7–9, 10–13) instead of a
+  suggestion list. Tap one to give it to the selected kids. On the setup page (Chores → Edit chore
+  profiles) you can change what is in each profile, rename or delete it, make your own, or restore the
+  defaults. Profiles can also be saved from a kid's existing chores.
+- **Arrange the tabs:** Settings on the Portal (↕ Arrange tabs) or the setup page (Settings → Arrange the
+  tabs) puts the tab cards in the order you want.
+- **Reset PortalHub:** Settings → Reset PortalHub (Portal, double confirmation) or the setup page (type
+  RESET) erases all data and settings and returns the app to a fresh install. Back up first.
+- **Hide the side panel:** one tap on the board (or a setting on the phone page) tucks the clock and
+  today list away so the calendar or chores use the whole screen. A ☰ button brings it back.
+- **Dark setup page:** the phone/browser setup page is dark by default, with a button to switch to light
+  (remembered per browser).
 - **Choose your tabs and your home screen:** switch any tab off and pick the one the board opens on.
 - **Voice commands (optional, off by default):** say "add paper towels to the shopping list". It runs
   on the Portal with no account and sends no audio anywhere. English only, a few fixed phrases.

@@ -83,6 +83,15 @@ class ConfigServer(
             json(Chores.statusJson(ctx))
         s.uri == "/api/chores" && s.method == Method.POST ->
             json(Chores.mutate(ctx, org.json.JSONObject(readBody(s))))
+        s.uri == "/api/reset" && s.method == Method.POST -> {
+            // Wipes everything. The caller has to type the word, so a stray request can't do it.
+            if (org.json.JSONObject(readBody(s)).optString("confirm") != "RESET") throw IllegalArgumentException("type RESET to confirm")
+            ConfigBundle.resetAll(ctx)
+            App.instance.lastEvents = emptyList()
+            App.instance.notifyDataChanged()
+            onConfigChanged()
+            json("{\"ok\":true}")
+        }
         s.uri == "/api/voice" && s.method == Method.GET ->
             json(voiceJson())
         s.uri == "/api/voice" && s.method == Method.POST -> {
@@ -264,19 +273,28 @@ class ConfigServer(
                 .put("weekStart", store.weekStart())
                 .put("defaultView", store.defaultView())
                 .put("orientation", store.orientation())
-                .put("theme", store.theme()).toString())
+                .put("theme", store.theme())
+                .put("sidebar", !store.sidebarHidden())
+                .put("sounds", store.soundEffects())
+                .put("tabOrder", org.json.JSONArray(store.tabOrder())).toString())
         s.uri == "/api/layout" && s.method == Method.POST -> {
             val o = org.json.JSONObject(readBody(s))
             if (o.has("weekStart")) store.setWeekStart(o.getInt("weekStart"))
             if (o.has("defaultView")) store.setDefaultView(o.getInt("defaultView"))
             if (o.has("orientation")) store.setOrientation(o.getString("orientation"))
             if (o.has("theme")) store.setTheme(o.getString("theme"))
+            if (o.has("sidebar")) store.setSidebarHidden(!o.getBoolean("sidebar"))
+            if (o.has("sounds")) store.setSoundEffects(o.getBoolean("sounds"))
+            o.optJSONArray("tabOrder")?.let { a -> store.setTabOrder((0 until a.length()).map { a.getString(it) }) }
             onConfigChanged() // re-render / rebuild (week start, theme, orientation)
             json(org.json.JSONObject()
                 .put("weekStart", store.weekStart())
                 .put("defaultView", store.defaultView())
                 .put("orientation", store.orientation())
-                .put("theme", store.theme()).toString())
+                .put("theme", store.theme())
+                .put("sidebar", !store.sidebarHidden())
+                .put("sounds", store.soundEffects())
+                .put("tabOrder", org.json.JSONArray(store.tabOrder())).toString())
         }
         s.uri == "/api/scale" && s.method == Method.GET ->
             json("{\"scale\":${store.uiScale()}}")
@@ -310,11 +328,13 @@ class ConfigServer(
         // Mirror-all: the hub's whole config bundle (includes feeds + credentials).
         s.uri == "/api/family/full" && s.method == Method.GET ->
             resp(200, "text/plain", ConfigBundle.exportPlain(ctx))
-        s.uri == "/api/effects" && s.method == Method.GET ->
-            json("{\"enabled\":${store.choreEffects()}}")
+        s.uri == "/api/effects" && s.method == Method.GET -> json(effectsJson())
         s.uri == "/api/effects" && s.method == Method.POST -> {
-            store.setChoreEffects(org.json.JSONObject(readBody(s)).getBoolean("enabled"))
-            json("{\"enabled\":${store.choreEffects()}}")
+            val o = org.json.JSONObject(readBody(s))
+            if (o.has("enabled")) store.setChoreEffects(o.getBoolean("enabled"))
+            for (k in CELEBRATE_KINDS) if (o.has(k)) store.setCelebrate(k, o.getBoolean(k))
+            o.optString("preview").takeIf { it in CELEBRATE_KINDS }?.let { App.instance.previewCelebration(it) }
+            json(effectsJson())
         }
         s.uri == "/api/screensaver" && s.method == Method.GET ->
             json(Screensaver.statusJson(ctx))
@@ -334,6 +354,9 @@ class ConfigServer(
         Rules.TAB_KEYS.forEach { o.put(it, store.featureEnabled(it, default = it in DEFAULT_ON)) }
         o.put("defaultTab", store.defaultTab())
     }.toString()
+
+    private fun effectsJson(): String = org.json.JSONObject().put("enabled", store.choreEffects())
+        .apply { for (k in CELEBRATE_KINDS) put(k, store.celebrate(k)) }.toString()
 
     private fun voiceJson(): String = org.json.JSONObject()
         .put("enabled", store.voiceEnabled())

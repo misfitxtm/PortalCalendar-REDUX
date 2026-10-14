@@ -34,7 +34,7 @@ fn http(port: u16, head: &str, body: &str) -> String {
 fn bare_address_without_sign_in_explains_how_to_sign_in() {
     let (s, p) = start();
     let r = http(p, &format!("GET / HTTP/1.1\r\nHost: 127.0.0.1:{p}"), "");
-    assert!(r.starts_with("HTTP/1.1 401") && r.contains("QR code") && r.contains("text/html"), "{r}");
+    assert!(r.starts_with("HTTP/1.1 401") && r.contains("QR code") && r.contains("written as text under the QR") && r.contains("text/html"), "{r}");
     let api = http(p, &format!("GET /api/export HTTP/1.1\r\nHost: 127.0.0.1:{p}"), "");
     assert!(api.ends_with("unauthorized"), "{api}"); // APIs stay terse
     s.stop();

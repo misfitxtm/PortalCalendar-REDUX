@@ -47,6 +47,7 @@ class App : Application() {
         store = ConfigStore(this)
         // Never let a Keystore problem stop the app from starting; secrets just stay as they were.
         runCatching { Secrets.migrate(this) }
+        runCatching { Chores.fixIcons(this) }
         sync = SyncManager(this, store)
         try {
             // Handle ignored: the server lives as long as the process.
@@ -66,6 +67,27 @@ class App : Application() {
         })
         if (Screensaver.isEnabled(this)) KeepAliveService.start(this)
         FamilySync.applyRole(this) // hub advertises / spoke discovers + polls
+    }
+
+    /** A child earned the 7-dry-days bonus: the board congratulates them. */
+    fun notifyBonus(name: String, stars: Int) {
+        main.post { activeBoard?.showBonus(name, stars) }
+    }
+
+    /** A daytime accident was logged (from the board, the phone, or a hub): the board plays its reaction. */
+    fun notifyAccident(name: String) {
+        main.post { activeBoard?.playAccidentAnimation(name) }
+    }
+
+    /** The phone page's "Preview" button: plays that celebration on the board (even when it is switched off). */
+    fun previewCelebration(kind: String) {
+        if (kind == "penalty") { main.post { activeBoard?.playPenalty("", -5, "Preview", force = true) }; return }
+        main.post { activeBoard?.celebrateBig(kind, "Great job!", if (kind == "potty") "Dry night — 3 in a row!" else "All done! Nice work!", force = true) }
+    }
+
+    /** Points were taken off (from the board, the phone, or a hub): the board shows its "ouch" screen. */
+    fun notifyDeduction(name: String, delta: Int, reason: String) {
+        main.post { activeBoard?.playPenalty(name, delta, reason) }
     }
 
     fun addConfigListener(l: () -> Unit) = configListeners.add(l)

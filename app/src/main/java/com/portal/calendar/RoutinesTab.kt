@@ -17,9 +17,10 @@ import java.util.Calendar
 import kotlin.math.roundToInt
 
 /**
- * The board's Routines tab: one column per family member with today's checklist
- * items as big tappable cards, grouped by time-of-day section (morning / evening
- * …). A header shows how much of today's routine is done with a progress bar.
+ * The board's Get Ready tab (the routines): one column per family member with the
+ * checklist for the current time of day as big tappable cards. It follows the clock
+ * (morning until noon, afternoon until 5, then evening) unless a section chip pins
+ * another one. A header shows how much of that list is done, with a progress bar.
  * Tapping a card bounces it and toggles it complete — behind the kid's own PIN
  * if set, just like [ChoresTab]. No stars: finishing the list is the point.
  */
@@ -28,8 +29,20 @@ class RoutinesTab(
     private val onAddItem: () -> Unit = {},
     private val onGate: (memberPin: String, memberName: String, action: () -> Unit) -> Unit =
         { _, _, action -> action() },
-    private val onRemoveItem: (id: String, label: String) -> Unit = { _, _ -> }
+    private val onRemoveItem: (id: String, label: String) -> Unit = { _, _ -> },
+    /** Fired when a kid ticks the last item of the list being shown. */
+    private val onAllDone: (name: String) -> Unit = {}
 ) {
+    /** null = follow the clock; otherwise "morning" / "afternoon" / "evening" / "all". */
+    private var pinned: String? = null
+    private var lastAuto = ""
+    private lateinit var titleView: TextView
+    private lateinit var sectionRow: LinearLayout
+
+    private fun autoSection() = Rules.sectionForHour(Calendar.getInstance().get(Calendar.HOUR_OF_DAY))
+
+    /** True when the clock has moved into a new part of the day and the tab is following it. */
+    fun autoSectionChanged(): Boolean = pinned == null && lastAuto.isNotEmpty() && autoSection() != lastAuto
 
     private lateinit var columnsRow: LinearLayout
     val view: LinearLayout = build()
@@ -46,7 +59,8 @@ class RoutinesTab(
             gravity = Gravity.CENTER_VERTICAL
         }
         head.addView(TextView(ctx).apply {
-            text = "TODAY'S ROUTINES"
+            titleView = this
+            text = "GET READY"
             textSize = 13f
             setTextColor(ACCENT)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
@@ -62,7 +76,12 @@ class RoutinesTab(
             setPadding(dp(16), dp(7), dp(16), dp(7))
             setOnClickListener { onAddItem() }
         })
-        root.addView(head, lp(bottom = dp(12)))
+        root.addView(head, lp(bottom = dp(10)))
+        sectionRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        root.addView(android.widget.HorizontalScrollView(ctx).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(sectionRow)
+        }, lp(bottom = dp(12)))
         columnsRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
         root.addView(columnsRow, LinearLayout.LayoutParams(MATCH, 0, 1f))
         return root
@@ -80,10 +99,15 @@ class RoutinesTab(
             .format(todayCal.time)
 
         columnsRow.removeAllViews()
+        val auto = autoSection()
+        lastAuto = auto
+        val active = pinned ?: auto
+        titleView.text = if (active == "all") "GET READY" else "GET READY · ${active.uppercase()}"
+        renderChips(auto)
 
         if (items.length() == 0) {
             columnsRow.addView(TextView(ctx).apply {
-                text = "No routines yet — set them up from your phone\n(⚙ Settings shows the address)"
+                text = "No get-ready lists yet — set them up from your phone\n(⚙ Settings shows the address)"
                 textSize = 17f
                 setTextColor(MUTED)
                 gravity = Gravity.CENTER
@@ -101,8 +125,13 @@ class RoutinesTab(
             groups.getOrPut(mid) { ArrayList() }.add(c)
         }
 
-        for ((mid, list) in groups) {
-            if (mid.isEmpty() && list.isEmpty()) continue
+        for ((mid, allItems) in groups) {
+            if (mid.isEmpty() && allItems.isEmpty()) continue
+            // Only the part of the day being shown ("anytime" items count in every part).
+            val list = if (active == "all") allItems else allItems.filter {
+                val sec = it.optString("section").ifEmpty { "morning" }
+                sec == active || sec == "anytime"
+            }
             val member = (0 until members.length()).map { members.getJSONObject(it) }
                 .find { it.optString("id") == mid }
             val name = member?.optString("name") ?: "Anyone"
@@ -156,7 +185,7 @@ class RoutinesTab(
             val cardsBox = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
             if (list.isEmpty()) {
                 cardsBox.addView(TextView(ctx).apply {
-                    text = "Nothing today 🎉"
+                    text = if (active == "all") "Nothing today 🎉" else "Nothing for the $active 🎉"
                     textSize = 15f
                     setTextColor(MUTED)
                 })
@@ -164,7 +193,7 @@ class RoutinesTab(
             val order = Routines.SECTIONS.map { it.first }
             val sectionIcon = Routines.SECTIONS.toMap()
             val usedSections = list.map { it.optString("section").ifEmpty { "morning" } }.toSet()
-            val showHeaders = usedSections.size > 1
+            val showHeaders = active == "all" && usedSections.size > 1
             for (section in order) {
                 val inSection = list.filter {
                     (it.optString("section").ifEmpty { "morning" }) == section
@@ -178,7 +207,7 @@ class RoutinesTab(
                     letterSpacing = 0.08f
                 }, lp(top = dp(2), bottom = dp(6)))
                 for (c in inSection.sortedBy { doneToday.contains(it.optString("id")) }) {
-                    cardsBox.addView(itemCard(c, color, name, member, doneToday), lp(bottom = dp(10)))
+                    cardsBox.addView(itemCard(c, color, name, member, doneToday, total - doneCount), lp(bottom = dp(10)))
                 }
             }
             col.addView(ScrollView(ctx).apply {
@@ -193,7 +222,7 @@ class RoutinesTab(
     }
 
     private fun itemCard(
-        c: JSONObject, color: Int, name: String, member: JSONObject?, doneToday: Set<String>
+        c: JSONObject, color: Int, name: String, member: JSONObject?, doneToday: Set<String>, remaining: Int
     ): View {
         val done = doneToday.contains(c.optString("id"))
         val card = LinearLayout(ctx).apply {
@@ -221,6 +250,12 @@ class RoutinesTab(
             setTextColor(if (done) Color.WHITE else MUTED)
             setPadding(0, 0, dp(8), 0)
         })
+        if (c.optString("chore").isNotEmpty()) card.addView(TextView(ctx).apply {
+            text = "⭐ chore"
+            textSize = 11f
+            setTextColor(if (done) Color.WHITE else MUTED)
+            setPadding(0, 0, dp(8), 0)
+        })
         card.addView(TextView(ctx).apply {
             text = if (done) "✓" else ""
             textSize = 22f
@@ -235,14 +270,37 @@ class RoutinesTab(
             card.animate().scaleX(0.93f).scaleY(0.93f).setDuration(80).withEndAction {
                 card.animate().scaleX(1f).scaleY(1f).setDuration(80).start()
                 onGate(member?.optString("pin") ?: "", name) {
-                    runCatching {
+                    val ok = runCatching {
                         Routines.mutate(ctx, JSONObject()
                             .put("action", "toggle").put("itemId", c.optString("id")))
-                    }
+                    }.isSuccess
+                    // Ticking the last open item finishes this kid's list.
+                    if (ok && !done && remaining == 1) onAllDone(name)
                 }
             }.start()
         }
         return card
+    }
+
+    /** Section chips: "Now" follows the clock; the others pin a part of the day; "All" shows everything. */
+    private fun renderChips(auto: String) {
+        sectionRow.removeAllViews()
+        val icons = Routines.SECTIONS.toMap()
+        val chips = listOf<Pair<String?, String>>(
+            null to "⏱ Now · ${auto.replaceFirstChar { it.uppercase() }}",
+            "morning" to "${icons["morning"]} Morning", "afternoon" to "${icons["afternoon"]} Afternoon",
+            "evening" to "${icons["evening"]} Evening", "all" to "All day")
+        for ((key, label) in chips) {
+            val on = pinned == key
+            sectionRow.addView(TextView(ctx).apply {
+                text = label
+                textSize = 14f
+                setTextColor(if (on) Color.WHITE else INK)
+                background = rounded(if (on) ACCENT else PILL, 16)
+                setPadding(dp(14), dp(8), dp(14), dp(8))
+                setOnClickListener { pinned = key; render() }
+            }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(8) })
+        }
     }
 
     // ------------------------------------------------------------ helpers

@@ -23,6 +23,7 @@ const SIGN_IN_HELP: &str = "<!doctype html><meta charset=\"utf-8\"><meta name=\"
 <p>This page needs a sign-in link from the Portal itself.</p>\
 <ol><li>On the Portal, tap <b>⚙ Settings</b> and enter the parent PIN.</li>\
 <li>Scan the QR code shown there with this phone's camera, and open the link in your browser.</li></ol>\
+<p>On a computer? The same link is also written as text under the QR code, so you can copy or type it into this browser.</p>\
 <p>Already did that? Your link may be old: the code changes if the app was reinstalled, so scan the current one. \
 Open it in a normal browser, not inside another app.</p>";
 

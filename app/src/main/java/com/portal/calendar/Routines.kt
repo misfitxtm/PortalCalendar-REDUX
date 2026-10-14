@@ -83,6 +83,7 @@ object Routines {
                 else listOf(action.optString("memberId"))
                 val section = action.optString("section")
                     .takeIf { s -> SECTIONS.any { it.first == s } } ?: "morning"
+                val linkRequest = action.optString("chore").trim() // "" = none, "@auto" = match by name, else a chore title
                 Data.mutate(ctx, FILE) { arr ->
                     for (mid in targets) {
                         val item = JSONObject()
@@ -90,6 +91,7 @@ object Routines {
                             .put("title", title)
                             .put("memberId", mid)
                             .put("section", section)
+                            .put("chore", resolveLink(ctx, mid, title, linkRequest))
                             .put("icon", action.optString("icon").ifEmpty { "✅" })
                         if (action.optBoolean("oneTime", false)) {
                             item.put("oneTime", true)
@@ -113,9 +115,27 @@ object Routines {
                         if (done.getJSONObject(i).optString("itemId") == id) done.remove(i)
                 }
             }
+            "autoLink" -> {
+                // Links every item that has no chore yet to the chore with the same name, when there is one.
+                Data.mutate(ctx, FILE) { arr ->
+                    for (i in 0 until arr.length()) arr.getJSONObject(i).let { it2 ->
+                        if (it2.optString("chore").isEmpty())
+                            it2.put("chore", resolveLink(ctx, it2.optString("memberId"), it2.optString("title"), "@auto"))
+                    }
+                }
+            }
+            "setLink" -> {
+                val id = action.getString("itemId")
+                val chore = action.optString("chore").trim().take(60)
+                Data.mutate(ctx, FILE) { arr ->
+                    (0 until arr.length()).map { arr.getJSONObject(it) }.firstOrNull { it.optString("id") == id }
+                        ?.put("chore", chore) ?: throw IllegalArgumentException("that item is gone")
+                }
+            }
             "toggle" -> {
                 val id = action.getString("itemId")
                 val today = dayFmt().format(Date())
+                var nowDone = false
                 Data.mutate(ctx, DONE) { done ->
                     var removed = false
                     for (i in done.length() - 1 downTo 0) {
@@ -125,14 +145,27 @@ object Routines {
                         }
                     }
                     if (!removed) done.put(JSONObject().put("itemId", id).put("date", today))
+                    nowDone = !removed
                     prune(done)
                 }
+                // A linked chore follows the item.
+                Data.readArray(ctx, FILE).let { a -> (0 until a.length()).map { a.getJSONObject(it) } }
+                    .firstOrNull { it.optString("id") == id }
+                    ?.takeIf { it.optString("chore").isNotEmpty() }
+                    ?.let { item -> runCatching { Chores.syncLinked(ctx, item.optString("memberId"), item.optString("chore"), nowDone) } }
             }
             else -> throw IllegalArgumentException("unknown action")
         }
         FamilySync.pushIfSpoke(ctx, "routines", action.toString())
         App.instance.notifyDataChanged()
         return statusJson(ctx)
+    }
+
+    /** "" = no link, "@auto" = the person's chore with the same name (if any), anything else = that chore title. */
+    private fun resolveLink(ctx: Context, memberId: String, title: String, request: String): String = when (request) {
+        "" -> ""
+        "@auto" -> Chores.choreTitlesFor(ctx, memberId).firstOrNull { Rules.sameTask(it, title) } ?: ""
+        else -> request.take(60)
     }
 
     /** Due on a given yyyy-MM-dd date (+ its Calendar.DAY_OF_WEEK). */

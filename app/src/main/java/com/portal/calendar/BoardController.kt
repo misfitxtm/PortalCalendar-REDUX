@@ -69,7 +69,7 @@ class BoardController(private val baseCtx: Context) {
     private var lastDayStamp = ""
     private var statusLine = "Starting…"
 
-    // Top-level tabs: 0=Calendar 1=Chores 2=Lists 3=Meals 4=Routines 5=Potty 6=Shopping
+    // Top-level tabs: 0=Calendar 1=Chores 2=Lists 3=Meals 4=Get Ready (routines) 5=Pee Tracker 6=Shopping 7=Reward Shop (the strip order is the user's choice)
     private var currentTab = 0
     private lateinit var tabButtons: List<TextView>
     private lateinit var tabPanels: List<View>
@@ -77,8 +77,12 @@ class BoardController(private val baseCtx: Context) {
     private lateinit var choresTab: ChoresTab
     private lateinit var mealsTab: MealsTab
     private lateinit var routinesTab: RoutinesTab
+    private lateinit var tabRowView: LinearLayout
+    private lateinit var sidebarView: View
+    private lateinit var sidebarHandle: TextView
     private lateinit var pottyTab: PottyTab
     private lateinit var shoppingTab: ShoppingTab
+    private lateinit var rewardsTab: RewardsTab
     private var startTabChosen = false
 
     private lateinit var clockText: TextView
@@ -199,6 +203,7 @@ class BoardController(private val baseCtx: Context) {
             // any live-preview transform is cleared.
             contentRow.scaleX = 1f
             contentRow.scaleY = 1f
+            applyTabOrder() // the phone page can reorder tabs without a rebuild
             statusLine = "Config updated — syncing…"
             renderAll()
             doSync()
@@ -236,6 +241,7 @@ class BoardController(private val baseCtx: Context) {
             4 -> routinesTab.render()
             5 -> pottyTab.render()
             6 -> shoppingTab.render()
+            7 -> rewardsTab.render()
         }
         refreshFocusables()
     }
@@ -274,8 +280,16 @@ class BoardController(private val baseCtx: Context) {
     private fun voiceAvailable() =
         store.voiceEnabled() && (store.voiceEngine() != "gemini" || Gemini.isReady(ctx))
 
+    private fun tabOrderIdx() = store.tabOrder().map { Rules.TAB_KEYS.indexOf(it) }
+
+    /** Lays the tab cards out in the order chosen in Settings. */
+    private fun applyTabOrder() {
+        tabRowView.removeAllViews()
+        for (i in tabOrderIdx()) tabRowView.addView(tabButtons[i], LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(8) })
+    }
+
     private fun startTab(flags: List<Boolean> = Rules.effectiveTabs(store.tabFlags())) =
-        Rules.startTab(flags, Rules.TAB_KEYS.indexOf(store.defaultTab()))
+        Rules.startTab(flags, Rules.TAB_KEYS.indexOf(store.defaultTab()), tabOrderIdx())
 
     fun start() {
         App.instance.activeBoard = this
@@ -528,13 +542,32 @@ class BoardController(private val baseCtx: Context) {
             // Tall layout: the sidebar becomes a top strip (fixed height so its
             // weighted "today" scroll still has room), calendar fills below.
             row.orientation = LinearLayout.VERTICAL
-            row.addView(buildSidebar(), LinearLayout.LayoutParams(MATCH, dp(360)))
+            sidebarView = buildSidebar()
+            row.addView(sidebarView, LinearLayout.LayoutParams(MATCH, dp(360)))
             row.addView(buildMainArea(), LinearLayout.LayoutParams(MATCH, 0, 1f))
         } else {
             row.orientation = LinearLayout.HORIZONTAL
-            row.addView(buildSidebar(), LinearLayout.LayoutParams(dp(300), MATCH))
+            sidebarView = buildSidebar()
+            row.addView(sidebarView, LinearLayout.LayoutParams(dp(300), MATCH))
             row.addView(buildMainArea(), LinearLayout.LayoutParams(0, MATCH, 1f))
         }
+
+        // Handle that brings the side panel back; below the overlays so they cover it.
+        sidebarHandle = TextView(ctx).apply {
+            text = "☰"
+            textSize = 20f
+            gravity = Gravity.CENTER
+            setTextColor(INK)
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(PILL) }
+            alpha = 0.75f
+            elevation = dp(4).toFloat()
+            setOnClickListener { setSidebarHidden(false) }
+        }
+        root.addView(sidebarHandle, FrameLayout.LayoutParams(dp(48), dp(48)).apply {
+            gravity = Gravity.BOTTOM or Gravity.START
+            leftMargin = dp(10); bottomMargin = dp(10)
+        })
+        setSidebarHidden(store.sidebarHidden(), save = false)
 
         settingsOverlay = buildSettingsOverlay()
         root.addView(settingsOverlay, FrameLayout.LayoutParams(MATCH, MATCH))
@@ -554,6 +587,12 @@ class BoardController(private val baseCtx: Context) {
         root.addView(confirmOverlay, FrameLayout.LayoutParams(MATCH, MATCH))
         pinOverlay = buildPinOverlay()
         root.addView(pinOverlay, FrameLayout.LayoutParams(MATCH, MATCH))
+        accidentOverlay = buildAccidentOverlay()
+        root.addView(accidentOverlay, FrameLayout.LayoutParams(MATCH, MATCH))
+        partyOverlay = buildPartyOverlay()
+        root.addView(partyOverlay, FrameLayout.LayoutParams(MATCH, MATCH))
+        penaltyOverlay = buildPenaltyOverlay()
+        root.addView(penaltyOverlay, FrameLayout.LayoutParams(MATCH, MATCH))
 
         // Tap-to-talk mic — floats bottom-end, shown only when AI is ready.
         micFab = TextView(ctx).apply {
@@ -590,6 +629,230 @@ class BoardController(private val baseCtx: Context) {
             (a[0] - c[0] + anchor.width / 2).toFloat(),
             (a[1] - c[1] + anchor.height / 2).toFloat(),
             goalReached)
+    }
+
+    // ---------------------------------------------------- accident reaction
+
+    private lateinit var accidentOverlay: FrameLayout
+    private lateinit var accidentFace: TextView
+    private lateinit var accidentTitle: TextView
+    private val accidentAnims = ArrayList<android.animation.Animator>()
+    private var accidentToken = 0
+
+    private fun buildAccidentOverlay(): FrameLayout {
+        val scrim = FrameLayout(ctx).apply {
+            setBackgroundColor(0xE6120000.toInt())
+            visibility = View.GONE
+            isClickable = true // swallows taps; a tap anywhere also dismisses
+            setOnClickListener { stopAccidentAnimation() }
+        }
+        val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
+        accidentFace = TextView(ctx).apply { text = "😡"; textSize = 150f; gravity = Gravity.CENTER }
+        col.addView(accidentFace, LinearLayout.LayoutParams(WRAP, WRAP))
+        accidentTitle = TextView(ctx).apply {
+            textSize = 34f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }
+        col.addView(accidentTitle, lpMatchWrap(top = dp(12)))
+        col.addView(TextView(ctx).apply {
+            text = "💢  The whole week starts over  💢"; textSize = 20f; setTextColor(0xFFFFC9C4.toInt()); gravity = Gravity.CENTER
+        }, lpMatchWrap(top = dp(8)))
+        scrim.addView(col, FrameLayout.LayoutParams(MATCH, WRAP).apply { gravity = Gravity.CENTER })
+        return scrim
+    }
+
+    // ---------------------------------------------------- big celebration
+
+    private lateinit var partyOverlay: FrameLayout
+    private lateinit var partyEmoji: TextView
+    private lateinit var partyTitle: TextView
+    private lateinit var partySub: TextView
+    private val partyAnims = ArrayList<android.animation.Animator>()
+    private var partyToken = 0
+
+    private fun buildPartyOverlay(): FrameLayout {
+        val scrim = FrameLayout(ctx).apply {
+            setBackgroundColor(PARTY_A)
+            visibility = View.GONE
+            isClickable = true // swallows taps; a tap anywhere also dismisses
+            setOnClickListener { stopParty() }
+        }
+        val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
+        col.addView(TextView(ctx).apply {
+            text = "✨ 🎉 ✨ 🎉 ✨"; textSize = 30f; gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(WRAP, WRAP))
+        partyEmoji = TextView(ctx).apply { textSize = 150f; gravity = Gravity.CENTER }
+        col.addView(partyEmoji, LinearLayout.LayoutParams(WRAP, WRAP))
+        partyTitle = TextView(ctx).apply {
+            textSize = 38f; setTextColor(0xFFFFD54F.toInt()); gravity = Gravity.CENTER
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }
+        col.addView(partyTitle, lpMatchWrap(top = dp(8)))
+        partySub = TextView(ctx).apply { textSize = 22f; setTextColor(Color.WHITE); gravity = Gravity.CENTER }
+        col.addView(partySub, lpMatchWrap(top = dp(8)))
+        scrim.addView(col, FrameLayout.LayoutParams(MATCH, WRAP).apply { gravity = Gravity.CENTER })
+        return scrim
+    }
+
+    /**
+     * Full-screen party for a finished Get Ready list ("routines") or a dry night ("potty"): a bouncing trophy, confetti
+     * bursts and a power-up jingle. Skipped when that celebration is switched off, unless [force] (the phone's Preview).
+     */
+    fun celebrateBig(kind: String, title: String, sub: String, force: Boolean = false) {
+        if (!::partyOverlay.isInitialized || stopped) return
+        if (!force && !store.celebrate(kind)) return
+        stopParty(hideOnly = false)
+        val token = ++partyToken
+        partyEmoji.text = if (kind == "potty") "🌟" else "🏆"
+        partyTitle.text = title
+        partySub.text = sub
+        partyOverlay.visibility = View.VISIBLE
+        partyOverlay.setBackgroundColor(PARTY_A)
+        fun anim(a: android.animation.Animator) = a.also { partyAnims.add(it); it.start() }
+        // Pop in with an overshoot, then keep bouncing and wobbling while the background pulses.
+        partyEmoji.apply { scaleX = 0f; scaleY = 0f; translationY = 0f; rotation = 0f }
+        anim(android.animation.ObjectAnimator.ofPropertyValuesHolder(partyEmoji,
+            android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 0f, 1f),
+            android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 0f, 1f)).apply {
+            duration = 650; interpolator = android.view.animation.OvershootInterpolator(2.4f) })
+        anim(android.animation.ObjectAnimator.ofFloat(partyEmoji, View.TRANSLATION_Y, 0f, -dp(26).toFloat()).apply {
+            duration = 420; startDelay = 650; repeatCount = android.animation.ValueAnimator.INFINITE
+            repeatMode = android.animation.ValueAnimator.REVERSE; interpolator = android.view.animation.DecelerateInterpolator() })
+        anim(android.animation.ObjectAnimator.ofFloat(partyEmoji, View.ROTATION, -8f, 8f).apply {
+            duration = 560; startDelay = 650; repeatCount = android.animation.ValueAnimator.INFINITE
+            repeatMode = android.animation.ValueAnimator.REVERSE })
+        anim(android.animation.ObjectAnimator.ofArgb(partyOverlay, "backgroundColor", PARTY_A, PARTY_B).apply {
+            duration = 900; repeatCount = android.animation.ValueAnimator.INFINITE; repeatMode = android.animation.ValueAnimator.REVERSE })
+        for ((i, spot) in listOf(0.5f to 0.45f, 0.2f to 0.55f, 0.8f to 0.55f, 0.35f to 0.3f, 0.65f to 0.3f, 0.5f to 0.6f).withIndex()) {
+            handler.postDelayed({
+                if (partyToken == token && ::celebration.isInitialized)
+                    celebration.burst(view.width * spot.first, view.height * spot.second, true)
+            }, 350L * i)
+        }
+        if (store.soundEffects()) PowerUpSound.play()
+        handler.postDelayed({ if (partyToken == token) stopParty() }, 5500)
+    }
+
+    private fun stopParty(hideOnly: Boolean = true) {
+        partyAnims.forEach { runCatching { it.cancel() } }
+        partyAnims.clear()
+        PowerUpSound.stop()
+        if (hideOnly && ::partyOverlay.isInitialized) partyOverlay.visibility = View.GONE
+    }
+
+    // ---------------------------------------------------- points-deducted screen
+
+    private lateinit var penaltyOverlay: FrameLayout
+    private lateinit var penaltySkull: TextView
+    private lateinit var penaltyTitle: TextView
+    private lateinit var penaltyAmount: TextView
+    private lateinit var penaltyReason: TextView
+    private val penaltyAnims = ArrayList<android.animation.Animator>()
+    private var penaltyToken = 0
+
+    private fun buildPenaltyOverlay(): FrameLayout {
+        val scrim = FrameLayout(ctx).apply {
+            setBackgroundColor(PENALTY_A)
+            visibility = View.GONE
+            isClickable = true // swallows taps; a tap anywhere also dismisses
+            clipChildren = false // the skull hops and falls outside the column
+            setOnClickListener { stopPenalty() }
+        }
+        val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; clipChildren = false }
+        col.addView(TextView(ctx).apply { text = "💔  💔  💔"; textSize = 30f; gravity = Gravity.CENTER }, LinearLayout.LayoutParams(WRAP, WRAP))
+        penaltySkull = TextView(ctx).apply { text = "💀"; textSize = 130f; gravity = Gravity.CENTER }
+        col.addView(penaltySkull, LinearLayout.LayoutParams(WRAP, WRAP))
+        penaltyTitle = TextView(ctx).apply {
+            textSize = 34f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }
+        col.addView(penaltyTitle, lpMatchWrap(top = dp(4)))
+        penaltyAmount = TextView(ctx).apply {
+            textSize = 64f; setTextColor(0xFFFF5252.toInt()); gravity = Gravity.CENTER
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }
+        col.addView(penaltyAmount, lpMatchWrap())
+        penaltyReason = TextView(ctx).apply { textSize = 20f; setTextColor(0xFFFFC9C4.toInt()); gravity = Gravity.CENTER }
+        col.addView(penaltyReason, lpMatchWrap(top = dp(4)))
+        scrim.addView(col, FrameLayout.LayoutParams(MATCH, WRAP).apply { gravity = Gravity.CENTER })
+        return scrim
+    }
+
+    /**
+     * Points were deducted: a dark red screen where a skull hops up and falls off the bottom, the amount shakes in,
+     * and a sad "game over" tune plays. Skipped when switched off in Settings, unless [force] (the phone's Preview).
+     */
+    fun playPenalty(name: String, delta: Int, reason: String, force: Boolean = false) {
+        if (!::penaltyOverlay.isInitialized || stopped) return
+        if (!force && !store.celebrate("penalty")) return
+        stopPenalty(hideOnly = false)
+        val token = ++penaltyToken
+        penaltyTitle.text = if (name.isBlank()) "Ouch!" else "Ouch, $name!"
+        penaltyAmount.text = "−${kotlin.math.abs(delta)} ⭐"
+        penaltyReason.text = reason
+        penaltyReason.visibility = if (reason.isBlank()) View.GONE else View.VISIBLE
+        penaltyOverlay.visibility = View.VISIBLE
+        penaltyOverlay.setBackgroundColor(PENALTY_A)
+        penaltySkull.apply { translationY = 0f; rotation = 0f; alpha = 1f }
+        fun anim(a: android.animation.Animator) = a.also { penaltyAnims.add(it); it.start() }
+        // Hop up, hang for a beat, then drop through the floor while spinning.
+        anim(android.animation.ObjectAnimator.ofFloat(penaltySkull, View.TRANSLATION_Y, 0f, -dp(170).toFloat()).apply {
+            duration = 380; interpolator = android.view.animation.DecelerateInterpolator() })
+        anim(android.animation.ObjectAnimator.ofFloat(penaltySkull, View.TRANSLATION_Y, -dp(170).toFloat(), view.height.toFloat()).apply {
+            startDelay = 630; duration = 1000; interpolator = android.view.animation.AccelerateInterpolator(1.6f) })
+        anim(android.animation.ObjectAnimator.ofFloat(penaltySkull, View.ROTATION, 0f, 540f).apply { startDelay = 630; duration = 1000 })
+        anim(android.animation.ObjectAnimator.ofFloat(penaltyAmount, View.TRANSLATION_X, 0f, dp(26).toFloat()).apply {
+            duration = 700; interpolator = android.view.animation.CycleInterpolator(5f) })
+        anim(android.animation.ObjectAnimator.ofArgb(penaltyOverlay, "backgroundColor", PENALTY_A, PENALTY_B).apply {
+            duration = 700; repeatCount = android.animation.ValueAnimator.INFINITE; repeatMode = android.animation.ValueAnimator.REVERSE })
+        if (store.soundEffects()) GameOverSound.play()
+        handler.postDelayed({ if (penaltyToken == token) stopPenalty() }, 5000)
+    }
+
+    private fun stopPenalty(hideOnly: Boolean = true) {
+        penaltyAnims.forEach { runCatching { it.cancel() } }
+        penaltyAnims.clear()
+        GameOverSound.stop()
+        if (hideOnly && ::penaltyOverlay.isInitialized) penaltyOverlay.visibility = View.GONE
+    }
+
+    /** A child earned the 7-dry-days bonus: a cheer, and a celebration burst. */
+    fun showBonus(name: String, stars: Int) {
+        if (stopped) return
+        android.widget.Toast.makeText(ctx, "⭐ ${name.ifBlank { "Great job" }} earned +$stars bonus stars for 7 dry days in a row!",
+            android.widget.Toast.LENGTH_LONG).show()
+        if (::celebration.isInitialized) celebration.burst(view.width / 2f, view.height / 2f, true)
+    }
+
+    /** Angry, shaking face over a pulsing red screen for a few seconds; any tap dismisses it. */
+    fun playAccidentAnimation(name: String) {
+        if (!::accidentOverlay.isInitialized || stopped) return
+        stopAccidentAnimation(hideOnly = false)
+        val token = ++accidentToken
+        accidentTitle.text = if (name.isBlank()) "Oh no!" else "Oh no, $name!"
+        accidentOverlay.visibility = View.VISIBLE
+        accidentFace.apply { translationX = 0f; rotation = 0f; scaleX = 1f; scaleY = 1f }
+        fun anim(a: android.animation.ObjectAnimator) = a.also { accidentAnims.add(it); it.start() }
+        // Shake side to side, wobble, and pulse bigger: three overlapping loops.
+        anim(android.animation.ObjectAnimator.ofFloat(accidentFace, View.TRANSLATION_X, 0f, dp(34).toFloat()).apply {
+            duration = 650; repeatCount = 5; interpolator = android.view.animation.CycleInterpolator(4f) })
+        anim(android.animation.ObjectAnimator.ofFloat(accidentFace, View.ROTATION, 0f, 14f).apply {
+            duration = 520; repeatCount = 7; interpolator = android.view.animation.CycleInterpolator(3f) })
+        anim(android.animation.ObjectAnimator.ofPropertyValuesHolder(accidentFace,
+            android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.28f, 1f),
+            android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.28f, 1f)).apply {
+            duration = 480; repeatCount = 8 })
+        anim(android.animation.ObjectAnimator.ofArgb(accidentOverlay, "backgroundColor", 0xE6120000.toInt(), 0xE6A01212.toInt()).apply {
+            duration = 420; repeatCount = 9; repeatMode = android.animation.ValueAnimator.REVERSE })
+        if (store.soundEffects()) AccidentSound.play(ctx)
+        handler.postDelayed({ if (accidentToken == token) stopAccidentAnimation() }, 4500)
+    }
+
+    private fun stopAccidentAnimation(hideOnly: Boolean = true) {
+        accidentAnims.forEach { runCatching { it.cancel() } }
+        accidentAnims.clear()
+        AccidentSound.stop()
+        if (hideOnly && ::accidentOverlay.isInitialized) accidentOverlay.visibility = View.GONE
     }
 
     private fun buildVoiceOverlay(): FrameLayout {
@@ -672,31 +935,27 @@ class BoardController(private val baseCtx: Context) {
     }
 
     private fun refreshChoreOverlay() {
-        // Learned suggestions (≥2 past adds) lead; static presets fill in after.
+        // Ready-made sets by age: tapping one adds that whole profile to the people picked below.
         choreBankRow.removeAllViews()
-        val picks = ArrayList<Pair<String, String>>()
-        runCatching {
-            val sugg = org.json.JSONObject(Chores.statusJson(ctx)).optJSONArray("suggestions")
-            for (i in 0 until (sugg?.length() ?: 0)) {
-                val s = sugg!!.getJSONObject(i)
-                picks.add(s.optString("icon") to s.optString("title"))
-            }
-        }
-        for (preset in CHORE_BANK) {
-            if (picks.none { MagicWords.fuzzyEquals(it.second.lowercase(), preset.second.lowercase()) })
-                picks.add(preset)
-        }
-        for ((icon, title) in picks) {
+        val profiles = runCatching { org.json.JSONObject(Chores.statusJson(ctx)).getJSONArray("profiles") }.getOrNull()
+        for (i in 0 until (profiles?.length() ?: 0)) {
+            val p = profiles!!.getJSONObject(i)
+            val label = p.optString("name")
             choreBankRow.addView(TextView(ctx).apply {
-                text = "$icon $title"
-                textSize = 13f
+                text = "👤 $label · ${p.getJSONArray("items").length()}"
+                textSize = 14f
                 setTextColor(INK)
                 background = rounded(PILL, 16)
-                setPadding(dp(12), dp(8), dp(12), dp(8))
+                setPadding(dp(14), dp(9), dp(14), dp(9))
                 setOnClickListener {
-                    choreIcon = icon
-                    choreTitleInput.setText(title)
-                    refreshChoreOverlay()
+                    if (choreSelectedIds.isEmpty()) { choreMsg.text = "Pick at least one person first"; return@setOnClickListener }
+                    runCatching {
+                        Chores.mutate(ctx, org.json.JSONObject().put("action", "applyProfile").put("profileId", p.optString("id"))
+                            .put("memberIds", org.json.JSONArray(choreSelectedIds.toList())))
+                    }.onSuccess {
+                        choreMsg.text = "✓ Added the “$label” chores"
+                        handler.postDelayed({ choreOverlay.visibility = View.GONE }, 900)
+                    }.onFailure { choreMsg.text = it.message ?: "couldn't add that profile" }
                 }
             }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
         }
@@ -754,7 +1013,12 @@ class BoardController(private val baseCtx: Context) {
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         }, lpMatchWrap(bottom = dp(10)))
 
-        // Quick-pick bank: the family's learned favorites first, then presets.
+        // Profiles by age (4–6, 7–9, 10–13 and your own), edited on the setup page.
+        card.addView(TextView(ctx).apply {
+            text = "Add a whole set of chores for the people picked below:"
+            textSize = 13f
+            setTextColor(MUTED)
+        }, lpMatchWrap(bottom = dp(6)))
         choreBankRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
         card.addView(android.widget.HorizontalScrollView(ctx).apply {
             isHorizontalScrollBarEnabled = false
@@ -1011,7 +1275,7 @@ class BoardController(private val baseCtx: Context) {
             isClickable = true
         }
         card.addView(TextView(ctx).apply {
-            text = "New routine item"
+            text = "New get-ready item"
             textSize = 20f
             setTextColor(INK)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
@@ -1178,6 +1442,7 @@ class BoardController(private val baseCtx: Context) {
                 .put("icon", routineIcon)
                 .put("section", routineSection)
                 .put("memberIds", org.json.JSONArray(routineSelectedIds.toList()))
+                .put("chore", "@auto") // links to the person's chore with the same name, if there is one
             if (routineOneTime) {
                 action.put("oneTime", true)
                 action.put("date", SimpleDateFormat("yyyy-MM-dd", Locale.US).format(routineDate.time))
@@ -1573,6 +1838,13 @@ class BoardController(private val baseCtx: Context) {
         setView(store.defaultView())
     }
 
+    /** Tucks the side panel away (or brings it back); the choice is remembered. */
+    private fun setSidebarHidden(hidden: Boolean, save: Boolean = true) {
+        if (save) store.setSidebarHidden(hidden)
+        sidebarView.visibility = if (hidden) View.GONE else View.VISIBLE
+        sidebarHandle.visibility = if (hidden) View.VISIBLE else View.GONE
+    }
+
     private fun buildSidebar(): View {
         val side = LinearLayout(ctx)
         side.orientation = LinearLayout.VERTICAL
@@ -1641,6 +1913,15 @@ class BoardController(private val baseCtx: Context) {
             setPadding(0, dp(8), dp(12), dp(2))
             setOnClickListener { requirePin { showSettingsOverlay() } }
         }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        bottomRow.addView(TextView(ctx).apply {
+            text = "◀ Hide"
+            textSize = 14f
+            setTextColor(MUTED)
+            gravity = Gravity.CENTER
+            minimumHeight = dp(48)
+            setPadding(dp(12), dp(8), dp(12), dp(2))
+            setOnClickListener { setSidebarHidden(true) }
+        })
         exitButton = TextView(ctx).apply {
             text = "✕"
             textSize = 16f
@@ -1665,7 +1946,7 @@ class BoardController(private val baseCtx: Context) {
             setPadding(dp(22), dp(12), dp(22), 0)
         }
         val tabs = ArrayList<TextView>()
-        listOf("Calendar", "Chores", "Lists", "Meals", "Routines", "Potty", "Shopping").forEachIndexed { i, label ->
+        Rules.TAB_LABELS.forEachIndexed { i, label ->
             val t = TextView(ctx).apply {
                 text = label
                 textSize = 15f
@@ -1676,12 +1957,11 @@ class BoardController(private val baseCtx: Context) {
                 // Shopping is parent-locked: ask for the PIN each time it is opened.
                 setOnClickListener { if (i == Rules.SHOPPING_TAB) requirePin { setTab(i) } else setTab(i) }
             }
-            tabRow.addView(t, LinearLayout.LayoutParams(WRAP, WRAP).apply {
-                rightMargin = dp(8)
-            })
             tabs.add(t)
         }
         tabButtons = tabs
+        tabRowView = tabRow
+        applyTabOrder()
         outer.addView(tabRow, lpMatchWrap())
 
         val area = FrameLayout(ctx)
@@ -1728,20 +2008,40 @@ class BoardController(private val baseCtx: Context) {
             },
             onRemoveItem = { id, label ->
                 requirePin {
-                    confirm("Remove this routine item?", label, "Remove") {
+                    confirm("Remove this get-ready item?", label, "Remove") {
                         runCatching {
                             Routines.mutate(ctx, org.json.JSONObject()
                                 .put("action", "deleteItem").put("itemId", id))
                         }
                     }
                 }
-            })
+            },
+            onAllDone = { name -> celebrateBig("routines", if (name.isBlank() || name == "Anyone") "All done!" else "All done, $name!", "Everything on the list is checked off 🎉") })
         area.addView(routinesTab.view, FrameLayout.LayoutParams(MATCH, MATCH))
-        pottyTab = PottyTab(ctx, onCelebrate = { anchor, big -> celebrateAt(anchor, big) }) { action -> requirePin(action) }
+        pottyTab = PottyTab(ctx,
+            onCelebrate = { name, streak, milestone ->
+                celebrateBig("potty", if (name.isBlank()) "Great job!" else "Great job, $name!",
+                    if (milestone) "🔥 $streak dry days in a row!" else "Dry night! 🔥 Streak: $streak")
+            },
+            onConfirm = { title, message, button, action -> requirePin { confirm(title, message, button, action) } }
+        ) { action -> requirePin(action) }
         area.addView(pottyTab.view, FrameLayout.LayoutParams(MATCH, MATCH))
         shoppingTab = ShoppingTab(ctx)
         area.addView(shoppingTab.view, FrameLayout.LayoutParams(MATCH, MATCH))
-        tabPanels = listOf(weekPanel, choresTab.view, listsTab.view, mealsTab.view, routinesTab.view, pottyTab.view, shoppingTab.view)
+        rewardsTab = RewardsTab(ctx) { anchor, memberId, memberName, rewardId, rewardName ->
+            // A kid picks, a parent approves: spending takes the parent PIN.
+            requirePin {
+                runCatching {
+                    Chores.mutate(ctx, org.json.JSONObject().put("action", "redeem")
+                        .put("memberId", memberId).put("rewardId", rewardId))
+                }.onSuccess {
+                    celebrateAt(anchor, true)
+                    android.widget.Toast.makeText(ctx, "$memberName got: $rewardName 🎉", android.widget.Toast.LENGTH_LONG).show()
+                }.onFailure { android.widget.Toast.makeText(ctx, it.message ?: "couldn't redeem", android.widget.Toast.LENGTH_LONG).show() }
+            }
+        }
+        area.addView(rewardsTab.view, FrameLayout.LayoutParams(MATCH, MATCH))
+        tabPanels = listOf(weekPanel, choresTab.view, listsTab.view, mealsTab.view, routinesTab.view, pottyTab.view, shoppingTab.view, rewardsTab.view)
 
         // Nav row -------------------------------------------------------
         // Portrait is too narrow to fit the title + all controls on one line
@@ -1938,18 +2238,28 @@ class BoardController(private val baseCtx: Context) {
             p.visibility = if (idx == i) View.VISIBLE else View.GONE
         }
         tabButtons.forEachIndexed { idx, b ->
-            b.background = rounded(if (idx == i) ACCENT else PILL, 18)
-            b.setTextColor(if (idx == i) Color.WHITE else INK)
+            if (idx == Rules.REWARDS_TAB) {
+                // The Reward Shop tab is always gold so it stands out; a dark ring marks it as the open one.
+                b.background = android.graphics.drawable.GradientDrawable(
+                    android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFFFFE082.toInt(), 0xFFFFB300.toInt())
+                ).apply { cornerRadius = dp(18).toFloat(); if (idx == i) setStroke(dp(3), 0xFF4A2800.toInt()) }
+                b.setTextColor(0xFF4A2800.toInt())
+            } else {
+                b.background = rounded(if (idx == i) ACCENT else PILL, 18)
+                b.setTextColor(if (idx == i) Color.WHITE else INK)
+            }
         }
         when (i) {
-            0 -> { renderCalendar(); updateEmptyState() }
+            0 -> renderCalendar()
             1 -> choresTab.render()
             2 -> listsTab.render()
             3 -> mealsTab.render()
             4 -> routinesTab.render()
             5 -> pottyTab.render()
             6 -> shoppingTab.render()
+            7 -> rewardsTab.render()
         }
+        updateEmptyState() // the first-run QR must leave with the Calendar tab
         refreshFocusables()
     }
 
@@ -2140,6 +2450,29 @@ class BoardController(private val baseCtx: Context) {
         sizeRow.addView(sizeLabel, LinearLayout.LayoutParams(dp(52), WRAP))
         card.addView(sizeRow, lpMatchWrap(top = dp(12)))
 
+        // Arrange the tab cards (up/down) and factory reset.
+        orderBox = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+        card.addView(orderBox, lpMatchWrap(top = dp(10)))
+        val extras = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        extras.addView(navButton("↕ Arrange tabs") {
+            orderBox.visibility = if (orderBox.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            renderOrderBox()
+        })
+        extras.addView(navButton("⚠ Reset PortalHub…") {
+            confirm("Reset everything?",
+                "This erases ALL chores, points, members, calendars, lists, accounts and settings on this Portal. Make a backup first (setup page → Settings → Backup).",
+                "Continue") {
+                confirm("Really erase everything?", "This can't be undone. The Portal goes back to a fresh install.", "Erase everything") {
+                    ConfigBundle.resetAll(ctx)
+                    settingsOverlay.visibility = View.GONE
+                    App.instance.lastEvents = emptyList()
+                    App.instance.notifyDataChanged()
+                    App.instance.notifyConfigChanged()
+                }
+            }
+        })
+        card.addView(extras, lpMatchWrap(top = dp(12)))
+
         val buttons = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
         buttons.addView(navButton("Sync now") {
             statusLine = "Syncing…"
@@ -2152,6 +2485,41 @@ class BoardController(private val baseCtx: Context) {
 
         scrim.addView(overlayScroll(card), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
         return scrim
+    }
+
+    private lateinit var orderBox: LinearLayout
+
+    /** One row per tab with up/down buttons; each move is saved and applied to the tab strip straight away. */
+    private fun renderOrderBox() {
+        orderBox.removeAllViews()
+        if (orderBox.visibility != View.VISIBLE) return
+        val order = store.tabOrder()
+        val flags = store.tabFlags()
+        order.forEachIndexed { pos, key ->
+            val idx = Rules.TAB_KEYS.indexOf(key)
+            val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            row.addView(TextView(ctx).apply {
+                text = Rules.TAB_LABELS[idx] + if (flags[idx]) "" else "  (off)"
+                textSize = 15f
+                setTextColor(if (flags[idx]) INK else FAINT)
+            }, LinearLayout.LayoutParams(0, WRAP, 1f))
+            fun mover(label: String, delta: Int) = TextView(ctx).apply {
+                text = label
+                textSize = 20f
+                gravity = Gravity.CENTER
+                setTextColor(if (pos + delta in order.indices) INK else FAINT)
+                minimumWidth = dp(48); minimumHeight = dp(44)
+                setOnClickListener {
+                    val to = pos + delta
+                    if (to !in order.indices) return@setOnClickListener
+                    store.setTabOrder(order.toMutableList().also { it.add(to, it.removeAt(pos)) })
+                    applyTabOrder()
+                    renderOrderBox()
+                }
+            }
+            row.addView(mover("▲", -1)); row.addView(mover("▼", 1))
+            orderBox.addView(row, lpMatchWrap())
+        }
     }
 
     /** Caps an overlay card at the screen height — scrolls at large UI scales. */
@@ -2891,6 +3259,8 @@ class BoardController(private val baseCtx: Context) {
         }
         val time = clockFmt!!.format(now.time)
         if (clockText.text?.toString() != time) clockText.text = time
+        // Get Ready follows the time of day: move on to the next list when the clock crosses noon or 5 pm.
+        if (currentTab == 4 && ::routinesTab.isInitialized && routinesTab.autoSectionChanged()) routinesTab.render()
         val date = dateFmt.format(now.time)
         if (dateText.text?.toString() != date) dateText.text = date
         val stamp = "${now.get(Calendar.YEAR)}-${now.get(Calendar.DAY_OF_YEAR)}"
@@ -2913,6 +3283,7 @@ class BoardController(private val baseCtx: Context) {
                     4 -> routinesTab.render()
                     5 -> pottyTab.render()
                     6 -> shoppingTab.render()
+            7 -> rewardsTab.render()
                 }
             }
         }
@@ -3255,13 +3626,6 @@ class BoardController(private val baseCtx: Context) {
         private const val VIEW_MONTH = 2
         private const val VIEW_SCHEDULE = 3
 
-        /** Quick-pick chores for the on-device composer. */
-        private val CHORE_BANK = listOf(
-            "🛏️" to "Make the bed", "🦷" to "Brush teeth", "📚" to "Homework",
-            "🐕" to "Feed the pet", "🍽️" to "Set the table", "🥣" to "Clear the dishes",
-            "🧺" to "Put laundry away", "🧸" to "Tidy your room", "🗑️" to "Take out the trash",
-            "🚿" to "Shower", "🎵" to "Practice music", "🪴" to "Water the plants")
-
         /** Quick-pick get-ready items for the on-device routine composer. */
         private val ROUTINE_BANK = listOf(
             "🎒" to "Pack the backpack", "📚" to "Pack homework", "🥪" to "Pack lunch",
@@ -3272,6 +3636,10 @@ class BoardController(private val baseCtx: Context) {
         // Single source of truth: Palette.kt. Getters (not cached vals) so a
         // theme switch — which rebuilds the board — is reflected live.
         private val BG get() = Palette.BG
+        private const val PENALTY_A = 0xFF160000.toInt() // near-black red
+        private const val PENALTY_B = 0xFF5C0A0A.toInt()
+        private const val PARTY_A = 0xFF2A0F5C.toInt() // deep purple
+        private const val PARTY_B = 0xFF0F5C8A.toInt() // ocean blue
         private val CARD get() = Palette.CARD
         private val TODAY_CARD get() = Palette.TODAY_CARD
         private val PILL get() = Palette.PILL
