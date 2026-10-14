@@ -662,6 +662,14 @@
   </div>
 
   <div class="card" data-tab="settings">
+    <strong>💻 Sign in a computer</strong>
+    <p style="font-size:13px;color:var(--muted);margin:6px 0 10px;">A computer that can't scan the QR code can sign in with a 6-digit code instead. Open <b id="pairHost">this address</b> on the computer, then type the code. It works once and expires after 5 minutes.</p>
+    <button style="width:100%;" onclick="newPairCode()">Show a code</button>
+    <div id="pairCode" style="display:none;text-align:center;font-size:44px;font-weight:700;letter-spacing:.12em;margin-top:12px;color:var(--ink);"></div>
+    <div id="pairMsg" class="msgline"></div>
+  </div>
+
+  <div class="card" data-tab="settings">
     <strong>↺ Start fresh</strong>
     <p style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Reset just part of the hub. Everything else stays. This cannot be undone.</p>
     <label class="switchrow" style="display:flex;align-items:center;gap:10px;font-size:15px;color:var(--ink);"><input type="checkbox" class="freshChk" value="points" style="width:22px;height:22px;flex:none;"><span>⭐ This week's points <span style="color:var(--muted);font-size:13px;">(bonuses, penalties, spending; checked chores stay)</span></span></label>
@@ -2658,6 +2666,25 @@ async function saveTabOrder(order){
     if (!r.ok) throw new Error(l.error || 'failed');
     tabOrder = l.tabOrder; renderTabOrder();
   } catch(e){ show('tabOrderMsg', e.message, false); }
+}
+let pairTimer = null;
+async function newPairCode(){
+  try {
+    const r = await fetch('/api/pair/new', {method:'POST', body:'{}'});
+    const b = await r.json();
+    if (!r.ok) throw new Error(b.error || 'failed');
+    const box = document.getElementById('pairCode');
+    box.textContent = b.code.slice(0, 3) + ' ' + b.code.slice(3);
+    box.style.display = 'block';
+    document.getElementById('pairHost').textContent = 'http://' + location.host;
+    let left = b.seconds;
+    clearInterval(pairTimer);
+    pairTimer = setInterval(() => {
+      left--;
+      if (left <= 0) { clearInterval(pairTimer); box.style.display = 'none'; show('pairMsg', 'The code expired', false); }
+      else show('pairMsg', 'Expires in ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0'), true);
+    }, 1000);
+  } catch(e){ show('pairMsg', e.message, false); }
 }
 async function startFresh(){
   const scopes = [...document.querySelectorAll('.freshChk:checked')].map(c => c.value);

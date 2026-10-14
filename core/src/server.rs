@@ -24,6 +24,13 @@ const SIGN_IN_HELP: &str = "<!doctype html><meta charset=\"utf-8\"><meta name=\"
 <ol><li>On the Portal, tap <b>⚙ Settings</b> and enter the parent PIN.</li>\
 <li>Scan the QR code shown there with this phone's camera, and open the link in your browser.</li></ol>\
 <p>On a computer? The same link is also written as text under the QR code, so you can copy or type it into this browser.</p>\
+<h3>Or use a pairing code</h3>\
+<p>On the Portal tap <b>⚙ Settings → 💻 Pair a computer</b> (or use <b>Settings → Sign in a computer</b> on a phone that is already signed in), then type the 6-digit code here. It works once and expires after 5 minutes.</p>\
+<form onsubmit=\"go();return false\"><input id=\"c\" inputmode=\"numeric\" maxlength=\"7\" autocomplete=\"off\" placeholder=\"123 456\" style=\"font-size:24px;width:7em\"> \
+<button style=\"font-size:20px\">Sign in</button></form><p id=\"m\" style=\"color:#b00\"></p>\
+<script>async function go(){var m=document.getElementById('m');try{\
+var r=await fetch('/pair',{method:'POST',body:JSON.stringify({code:document.getElementById('c').value})});\
+var b=await r.json();if(!r.ok)throw new Error(b.error||'failed');location.replace('/?t='+b.token)}catch(e){m.textContent=e.message}}</script>\
 <p>Already did that? Your link may be old: the code changes if the app was reinstalled, so scan the current one. \
 Open it in a normal browser, not inside another app.</p>";
 

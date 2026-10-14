@@ -2461,6 +2461,7 @@ class BoardController(private val baseCtx: Context) {
         card.addView(extras, lpMatchWrap(top = dp(12)))
         // Own row: three buttons across overflow the card and crush the text above them.
         val dangerRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        dangerRow.addView(navButton("💻 Pair a computer") { showPairCode() })
         dangerRow.addView(navButton("⚠ Reset PortalHub…") {
             confirm("Reset everything?",
                 "This erases ALL chores, points, members, calendars, lists, accounts and settings on this Portal. Make a backup first (setup page → Settings → Backup).",
@@ -2777,6 +2778,9 @@ class BoardController(private val baseCtx: Context) {
 
     private lateinit var qrOverlay: FrameLayout
     private lateinit var qrImage: android.widget.ImageView
+    private lateinit var qrTitle: TextView
+    private lateinit var qrCode: TextView
+    private lateinit var qrCaption: TextView
 
     /** "Save to phone": a QR that opens the shopping list as a .md download for the next 10 minutes. */
     private fun buildQrOverlay(): FrameLayout {
@@ -2794,16 +2798,20 @@ class BoardController(private val baseCtx: Context) {
             isClickable = true
             minimumWidth = dp(360)
         }
-        card.addView(TextView(ctx).apply {
-            text = "📱 Save the shopping list"; textSize = 20f; setTextColor(INK)
+        qrTitle = TextView(ctx).apply {
+            textSize = 20f; setTextColor(INK)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        })
+        }
+        card.addView(qrTitle)
         qrImage = android.widget.ImageView(ctx)
         card.addView(qrImage, LinearLayout.LayoutParams(dp(250), dp(250)).apply { topMargin = dp(12) })
-        card.addView(TextView(ctx).apply {
-            text = "Scan with your phone's camera to download shopping-list.md. The code works for 10 minutes."
-            textSize = 14f; setTextColor(MUTED); gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(dp(300), WRAP).apply { topMargin = dp(10) }) // fixed width: a wrap-width card mis-measures wrapped text
+        qrCode = TextView(ctx).apply { // the pairing code, in place of the QR
+            textSize = 54f; setTextColor(ACCENT); gravity = Gravity.CENTER; letterSpacing = 0.12f
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }
+        card.addView(qrCode, LinearLayout.LayoutParams(dp(300), WRAP).apply { topMargin = dp(12) })
+        qrCaption = TextView(ctx).apply { textSize = 14f; setTextColor(MUTED); gravity = Gravity.CENTER }
+        card.addView(qrCaption, LinearLayout.LayoutParams(dp(300), WRAP).apply { topMargin = dp(10) }) // fixed width: a wrap-width card mis-measures wrapped text
         card.addView(navButton("Close") { qrOverlay.visibility = View.GONE },
             LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(12) })
         scrim.addView(card, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
@@ -2812,8 +2820,25 @@ class BoardController(private val baseCtx: Context) {
 
     private fun showShoppingQr() {
         val ip = wifiIp() ?: return android.widget.Toast.makeText(ctx, "Connect the Portal to Wi-Fi first", android.widget.Toast.LENGTH_LONG).show()
+        qrTitle.text = "📱 Save the shopping list"
+        qrCaption.text = "Scan with your phone's camera to download shopping-list.md. The code works for 10 minutes."
+        qrCode.visibility = View.GONE
+        qrImage.visibility = View.VISIBLE
         qrImage.setImageBitmap(qrBitmap("http://$ip:${ConfigServer.PORT}/dl/shopping-list.md?c=${DownloadLink.issue()}", dp(250)))
         qrOverlay.visibility = View.VISIBLE
+    }
+
+    /** "Pair a computer": a 6-digit code to type on the sign-in page, for computers that can't scan the QR. */
+    private fun showPairCode() {
+        val ip = wifiIp() ?: "<portal-ip>"
+        val c = PairingCode.issue()
+        qrTitle.text = "💻 Pair a computer"
+        qrCode.text = c.substring(0, 3) + " " + c.substring(3)
+        qrCaption.text = "On the computer open http://$ip:${ConfigServer.PORT} and type this code. It works once and expires in 5 minutes."
+        qrImage.visibility = View.GONE
+        qrCode.visibility = View.VISIBLE
+        qrOverlay.visibility = View.VISIBLE
+        settingsOverlay.visibility = View.GONE
     }
 
     private fun buildDetailOverlay(): FrameLayout {
