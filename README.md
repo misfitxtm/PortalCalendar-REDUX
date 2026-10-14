@@ -33,7 +33,7 @@ screenshots. This fork keeps their MIT license and copyright in [LICENSE](LICENS
   chiptune run, not a recording). Each can be switched off, and previewed, on the setup page under
   Settings → Celebrations.
 - **"Ouch" screen:** taking points off a kid (from the board or the setup page) shows a full-screen dark
-  red screen: a skull hops up and falls off the bottom, "−5 ⭐" shakes in, and a sad game-over tune plays
+  red screen: a skull hops up and falls off the bottom, one 💔 per star lost, "−5 ⭐" shakes in, and a sad game-over tune plays
   (also synthesized). It has its own on/off switch and Preview button next to the celebrations.
 - **Get Ready (optional):** each kid's routine checklist that follows the clock: morning until noon,
   afternoon until 5, then evening. Chips let you look at another part of the day, a progress bar shows
@@ -46,13 +46,21 @@ screenshots. This fork keeps their MIT license and copyright in [LICENSE](LICENS
   chore points go to zero, and the board plays an angry reaction with a siren and three falling "womps"
   (switch the sounds off in Settings → Layout). Every 7 straight dry days earns +5 bonus stars.
 - **Shopping list (optional):** quick-add household items or type your own. Locked behind the parent
-  PIN on the board.
+  PIN on the board. "📱 Save to phone" shows a QR code; scanning it downloads the list as
+  `shopping-list.md` (a checklist). The code works for 10 minutes and opens only that file, never the
+  setup page.
 - **Chore profiles:** the "Add a chore" window offers age profiles (Ages 4–6, 7–9, 10–13) instead of a
   suggestion list. Tap one to give it to the selected kids. On the setup page (Chores → Edit chore
   profiles) you can change what is in each profile, rename or delete it, make your own, or restore the
   defaults. Profiles can also be saved from a kid's existing chores.
 - **Arrange the tabs:** Settings on the Portal (↕ Arrange tabs) or the setup page (Settings → Arrange the
   tabs) puts the tab cards in the order you want.
+- **☢️ Nuclear option:** for a kid who really got in trouble. In the points badge menu on the board (or the
+  Points card on the setup page) it takes every star they earned this week down to zero and plays the angry
+  screen with the siren. Checked chores stay checked, and it shows in the history so it can be undone.
+- **Start fresh:** reset just one part without touching the rest: this week's points, all chores, the
+  Pee Tracker, or the Get Ready lists. Settings → ↺ Start fresh… on the Portal, or Settings → Start
+  fresh on the setup page (type RESET). People, rewards, profiles and settings stay.
 - **Reset PortalHub:** Settings → Reset PortalHub (Portal, double confirmation) or the setup page (type
   RESET) erases all data and settings and returns the app to a fresh install. Back up first.
 - **Hide the side panel:** one tap on the board (or a setting on the phone page) tucks the clock and

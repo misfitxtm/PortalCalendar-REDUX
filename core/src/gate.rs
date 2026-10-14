@@ -52,6 +52,11 @@ impl Gate {
         if r.method == "GET" && (r.path == "/manifest.json" || r.path == "/icon.svg") {
             return Verdict::Allow;
         }
+        // One-off file links (the shopping list QR). The handler checks the short-lived code in the query,
+        // so this lets nothing through by itself; ".." is refused here so the prefix can't be used to climb out.
+        if r.method == "GET" && r.path.starts_with("/dl/") && !r.path.contains("..") {
+            return Verdict::Allow;
+        }
         if r.method == "GET" && r.path == "/" && query_param(r.query, "t").is_some_and(|t| self.eq(t)) {
             return Verdict::Bootstrap;
         }
@@ -159,6 +164,22 @@ mod tests {
     fn oauth_callback_needs_auth() {
         let r = Req { path: "/oauth", query: "code=x", cookie: None, ..req() };
         assert_eq!(gate().check(&r), Verdict::Reject(401, "unauthorized"));
+    }
+
+    #[test]
+    fn download_links_reach_the_handler_without_a_cookie_but_only_by_get() {
+        let get = Req { path: "/dl/shopping-list.md", query: "c=x", cookie: None, ..req() };
+        assert_eq!(gate().check(&get), Verdict::Allow);
+        let post = Req { method: "POST", ..get };
+        assert_eq!(gate().check(&post), Verdict::Reject(401, "unauthorized"));
+    }
+
+    #[test]
+    fn download_prefix_cannot_be_used_to_reach_other_routes() {
+        for p in ["/dl/../api/export", "/download/x", "/dl", "/api/dl/x"] {
+            let r = Req { path: p, cookie: None, ..req() };
+            assert_eq!(gate().check(&r), Verdict::Reject(401, "unauthorized"), "{p}");
+        }
     }
 
     #[test]

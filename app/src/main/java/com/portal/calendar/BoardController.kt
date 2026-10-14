@@ -339,6 +339,9 @@ class BoardController(private val baseCtx: Context) {
         if (detailOverlay.visibility == View.VISIBLE) {
             detailOverlay.visibility = View.GONE; closed = true
         }
+        if (qrOverlay.visibility == View.VISIBLE) {
+            qrOverlay.visibility = View.GONE; closed = true
+        }
         if (addOverlay.visibility == View.VISIBLE) {
             hideKeyboard()
             addOverlay.visibility = View.GONE; closed = true
@@ -577,6 +580,8 @@ class BoardController(private val baseCtx: Context) {
         root.addView(addOverlay, FrameLayout.LayoutParams(MATCH, MATCH))
         detailOverlay = buildDetailOverlay()
         root.addView(detailOverlay, FrameLayout.LayoutParams(MATCH, MATCH))
+        qrOverlay = buildQrOverlay()
+        root.addView(qrOverlay, FrameLayout.LayoutParams(MATCH, MATCH))
         choreOverlay = buildChoreOverlay()
         root.addView(choreOverlay, FrameLayout.LayoutParams(MATCH, MATCH))
         routineOverlay = buildRoutineOverlay()
@@ -743,6 +748,7 @@ class BoardController(private val baseCtx: Context) {
     // ---------------------------------------------------- points-deducted screen
 
     private lateinit var penaltyOverlay: FrameLayout
+    private lateinit var penaltyHearts: TextView
     private lateinit var penaltySkull: TextView
     private lateinit var penaltyTitle: TextView
     private lateinit var penaltyAmount: TextView
@@ -759,7 +765,8 @@ class BoardController(private val baseCtx: Context) {
             setOnClickListener { stopPenalty() }
         }
         val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; clipChildren = false }
-        col.addView(TextView(ctx).apply { text = "💔  💔  💔"; textSize = 30f; gravity = Gravity.CENTER }, LinearLayout.LayoutParams(WRAP, WRAP))
+        penaltyHearts = TextView(ctx).apply { gravity = Gravity.CENTER }
+        col.addView(penaltyHearts, lpMatchWrap())
         penaltySkull = TextView(ctx).apply { text = "💀"; textSize = 130f; gravity = Gravity.CENTER }
         col.addView(penaltySkull, LinearLayout.LayoutParams(WRAP, WRAP))
         penaltyTitle = TextView(ctx).apply {
@@ -789,6 +796,10 @@ class BoardController(private val baseCtx: Context) {
         val token = ++penaltyToken
         penaltyTitle.text = if (name.isBlank()) "Ouch!" else "Ouch, $name!"
         penaltyAmount.text = "−${kotlin.math.abs(delta)} ⭐"
+        // One broken heart per star lost; smaller when there are many so they still fit in a few rows.
+        val lost = kotlin.math.abs(delta).coerceIn(1, 50)
+        penaltyHearts.text = "💔 ".repeat(lost).trim()
+        penaltyHearts.textSize = when { lost <= 10 -> 30f; lost <= 25 -> 22f; else -> 16f }
         penaltyReason.text = reason
         penaltyReason.visibility = if (reason.isBlank()) View.GONE else View.VISIBLE
         penaltyOverlay.visibility = View.VISIBLE
@@ -1695,36 +1706,22 @@ class BoardController(private val baseCtx: Context) {
             Triple("−1  Got in trouble", -1, "Got in trouble"), Triple("−5  Big trouble", -5, "Big trouble"))
         val menu = android.widget.PopupMenu(ctx, anchor)
         opts.forEachIndexed { i, o -> menu.menu.add(0, i, i, o.first) }
-        menu.menu.add(0, SPEND_ITEM, SPEND_ITEM, "🎁 Spend points…")
+        menu.menu.add(0, NUKE_ITEM, NUKE_ITEM, "☢️ Nuclear: week to 0")
         menu.setOnMenuItemClickListener { item ->
-            if (item.itemId == SPEND_ITEM) { showRewardMenu(anchor, memberId); return@setOnMenuItemClickListener true }
+            if (item.itemId == NUKE_ITEM) {
+                confirm("☢️ Nuclear option for ${name.ifBlank { "this kid" }}?",
+                    "Every star ${name.ifBlank { "they" }} earned this week goes to zero. Checked-off chores stay checked, and you can undo it from the setup page's history.",
+                    "Launch it") {
+                    runCatching { Chores.mutate(ctx, org.json.JSONObject().put("action", "nuke").put("memberId", memberId)) }
+                        .onFailure { android.widget.Toast.makeText(ctx, it.message ?: "couldn't do that", android.widget.Toast.LENGTH_LONG).show() }
+                }
+                return@setOnMenuItemClickListener true
+            }
             val (_, delta, reason) = opts[item.itemId]
             runCatching {
                 Chores.mutate(ctx, org.json.JSONObject().put("action", "adjust")
                     .put("memberId", memberId).put("delta", delta).put("reason", reason))
             }
-            true
-        }
-        menu.show()
-    }
-
-    private fun showRewardMenu(anchor: View, memberId: String) {
-        val st = org.json.JSONObject(Chores.statusJson(ctx))
-        val left = st.getJSONObject("spendable").optInt(memberId)
-        val rewards = st.getJSONArray("rewards")
-        val menu = android.widget.PopupMenu(ctx, anchor)
-        menu.menu.add(0, -1, 0, "⭐ $left to spend this week").isEnabled = false
-        if (rewards.length() == 0) menu.menu.add(0, -2, 1, "No rewards yet — add some on your phone").isEnabled = false
-        for (i in 0 until rewards.length()) {
-            val r = rewards.getJSONObject(i)
-            menu.menu.add(0, i, i + 1, "${r.optString("icon")} ${r.optString("name")} — ${r.optInt("cost")}")
-                .isEnabled = left >= r.optInt("cost")
-        }
-        menu.setOnMenuItemClickListener { item ->
-            if (item.itemId >= 0) runCatching {
-                Chores.mutate(ctx, org.json.JSONObject().put("action", "redeem")
-                    .put("memberId", memberId).put("rewardId", rewards.getJSONObject(item.itemId).optString("id")))
-            }.onFailure { android.widget.Toast.makeText(ctx, it.message ?: "couldn't redeem", android.widget.Toast.LENGTH_SHORT).show() }
             true
         }
         menu.show()
@@ -2026,7 +2023,7 @@ class BoardController(private val baseCtx: Context) {
             onConfirm = { title, message, button, action -> requirePin { confirm(title, message, button, action) } }
         ) { action -> requirePin(action) }
         area.addView(pottyTab.view, FrameLayout.LayoutParams(MATCH, MATCH))
-        shoppingTab = ShoppingTab(ctx)
+        shoppingTab = ShoppingTab(ctx, onSavePhone = { showShoppingQr() })
         area.addView(shoppingTab.view, FrameLayout.LayoutParams(MATCH, MATCH))
         rewardsTab = RewardsTab(ctx) { anchor, memberId, memberName, rewardId, rewardName ->
             // A kid picks, a parent approves: spending takes the parent PIN.
@@ -2458,7 +2455,13 @@ class BoardController(private val baseCtx: Context) {
             orderBox.visibility = if (orderBox.visibility == View.VISIBLE) View.GONE else View.VISIBLE
             renderOrderBox()
         })
-        extras.addView(navButton("⚠ Reset PortalHub…") {
+        val freshBtn = navButton("↺ Start fresh…") {}
+        freshBtn.setOnClickListener { showResetMenu(freshBtn) }
+        extras.addView(freshBtn)
+        card.addView(extras, lpMatchWrap(top = dp(12)))
+        // Own row: three buttons across overflow the card and crush the text above them.
+        val dangerRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        dangerRow.addView(navButton("⚠ Reset PortalHub…") {
             confirm("Reset everything?",
                 "This erases ALL chores, points, members, calendars, lists, accounts and settings on this Portal. Make a backup first (setup page → Settings → Backup).",
                 "Continue") {
@@ -2471,7 +2474,7 @@ class BoardController(private val baseCtx: Context) {
                 }
             }
         })
-        card.addView(extras, lpMatchWrap(top = dp(12)))
+        card.addView(dangerRow, lpMatchWrap(top = dp(8)))
 
         val buttons = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
         buttons.addView(navButton("Sync now") {
@@ -2483,11 +2486,32 @@ class BoardController(private val baseCtx: Context) {
         buttons.addView(navButton("Close") { settingsOverlay.visibility = View.GONE })
         card.addView(buttons, lpMatchWrap(top = dp(14)))
 
-        scrim.addView(overlayScroll(card), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+        // Fixed width: a wrap-width card mis-measures its wrapped text and squashes the button rows.
+        scrim.addView(overlayScroll(card), FrameLayout.LayoutParams(dp(460), WRAP, Gravity.CENTER))
         return scrim
     }
 
     private lateinit var orderBox: LinearLayout
+
+    /** "Start fresh": reset one part of the hub (week's points, chores, Pee Tracker, Get Ready) after a confirmation. */
+    private fun showResetMenu(anchor: View) {
+        val opts = listOf(
+            Triple("⭐ This week's points", "points", "Everyone's points this week go to zero, including bonuses, penalties and anything spent. Checked-off chores stay checked."),
+            Triple("✅ Chores", "chores", "Removes every chore and its check-off history. People, points, rewards and chore profiles stay."),
+            Triple("🚽 Pee Tracker", "potty", "Erases every mark, streak, accident and bonus record. Who uses the tracker stays."),
+            Triple("⏰ Get Ready lists", "routines", "Removes every Get Ready item and its check-off history."))
+        val menu = android.widget.PopupMenu(ctx, anchor)
+        opts.forEachIndexed { i, o -> menu.menu.add(0, i, i, o.first) }
+        menu.setOnMenuItemClickListener { item ->
+            val (label, scope, what) = opts[item.itemId]
+            confirm("Reset $label?", "$what This can't be undone.", "Reset") {
+                runCatching { Resets.run(ctx, setOf(scope)) }
+                    .onSuccess { android.widget.Toast.makeText(ctx, "Reset: $label", android.widget.Toast.LENGTH_LONG).show() }
+            }
+            true
+        }
+        menu.show()
+    }
 
     /** One row per tab with up/down buttons; each move is saved and applied to the tab strip straight away. */
     private fun renderOrderBox() {
@@ -2749,6 +2773,47 @@ class BoardController(private val baseCtx: Context) {
     private fun hideKeyboard() {
         (ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(addTitleInput.windowToken, 0)
+    }
+
+    private lateinit var qrOverlay: FrameLayout
+    private lateinit var qrImage: android.widget.ImageView
+
+    /** "Save to phone": a QR that opens the shopping list as a .md download for the next 10 minutes. */
+    private fun buildQrOverlay(): FrameLayout {
+        val scrim = FrameLayout(ctx).apply {
+            setBackgroundColor(SCRIM)
+            visibility = View.GONE
+            setOnClickListener { visibility = View.GONE }
+        }
+        val card = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            background = rounded(CARD, 20)
+            elevation = dp(10).toFloat()
+            setPadding(dp(28), dp(22), dp(28), dp(16))
+            isClickable = true
+            minimumWidth = dp(360)
+        }
+        card.addView(TextView(ctx).apply {
+            text = "📱 Save the shopping list"; textSize = 20f; setTextColor(INK)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        })
+        qrImage = android.widget.ImageView(ctx)
+        card.addView(qrImage, LinearLayout.LayoutParams(dp(250), dp(250)).apply { topMargin = dp(12) })
+        card.addView(TextView(ctx).apply {
+            text = "Scan with your phone's camera to download shopping-list.md. The code works for 10 minutes."
+            textSize = 14f; setTextColor(MUTED); gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(dp(300), WRAP).apply { topMargin = dp(10) }) // fixed width: a wrap-width card mis-measures wrapped text
+        card.addView(navButton("Close") { qrOverlay.visibility = View.GONE },
+            LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(12) })
+        scrim.addView(card, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+        return scrim
+    }
+
+    private fun showShoppingQr() {
+        val ip = wifiIp() ?: return android.widget.Toast.makeText(ctx, "Connect the Portal to Wi-Fi first", android.widget.Toast.LENGTH_LONG).show()
+        qrImage.setImageBitmap(qrBitmap("http://$ip:${ConfigServer.PORT}/dl/shopping-list.md?c=${DownloadLink.issue()}", dp(250)))
+        qrOverlay.visibility = View.VISIBLE
     }
 
     private fun buildDetailOverlay(): FrameLayout {
@@ -3617,7 +3682,7 @@ class BoardController(private val baseCtx: Context) {
     }
 
     companion object {
-        private const val SPEND_ITEM = 100
+        private const val NUKE_ITEM = 101
         private const val MATCH = LinearLayout.LayoutParams.MATCH_PARENT
         private const val WRAP = LinearLayout.LayoutParams.WRAP_CONTENT
         private const val SYNC_INTERVAL_MS = 15L * 60 * 1000

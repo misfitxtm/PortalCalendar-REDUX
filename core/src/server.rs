@@ -128,7 +128,12 @@ fn serve(mut req: Request, gate: &Gate, handler: &dyn Handler) {
             content_type: "application/json".into(),
             body: br#"{"error":"internal error"}"#.to_vec(),
         });
-    reply(req, res.status, &res.content_type, res.body, &[]);
+    // A /dl/ link is a file to save, not a page to show: name it from the URL (safe characters only).
+    let name = path.strip_prefix("/dl/").filter(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b)));
+    let disposition = name.map(|n| format!("attachment; filename=\"{n}\""));
+    let extra: Vec<(&str, &str)> = disposition.iter().map(|d| ("Content-Disposition", d.as_str())).collect();
+    let extra = if res.status == 200 { extra } else { Vec::new() };
+    reply(req, res.status, &res.content_type, res.body, &extra);
 }
 
 fn reply(req: Request, status: u16, content_type: &str, body: Vec<u8>, extra: &[(&str, &str)]) {

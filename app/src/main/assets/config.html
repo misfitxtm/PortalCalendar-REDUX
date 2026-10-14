@@ -186,7 +186,7 @@
 
   <div class="card" data-tab="chores">
     <strong>🎁 Rewards (the 💰 Reward Shop 💰)</strong>
-    <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Prizes the kids can spend this week's points on. Tap any emoji, name or cost to change it. Spending takes points off and they reset every Friday, so unspent points don't carry over. Kids can pick from them on the board's <strong>💰 Reward Shop 💰</strong> tab (turn it on under Settings → Board tabs); a parent approves with the PIN. You can also spend from here or from the points badge.</div>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Prizes the kids can spend this week's points on. Tap any emoji, name or cost to change it. Spending takes points off and they reset every Friday, so unspent points don't carry over. Kids can pick from them on the board's <strong>💰 Reward Shop 💰</strong> tab (turn it on under Settings → Board tabs); a parent approves with the PIN.</div>
     <div id="rewardBox"></div>
     <div class="row2" style="margin-top:10px;">
       <input type="text" id="rwIcon" value="🎁" maxlength="4" style="margin:0;flex:none;width:64px;text-align:center;">
@@ -659,6 +659,18 @@
     <textarea id="cfgBlob" placeholder="Exported code appears here — or paste one to import" style="width:100%;height:90px;margin-top:10px;font-family:monospace;font-size:12px;"></textarea>
     <button class="ghost" style="width:100%;margin-top:8px;" onclick="importConfig()">Import / restore from the code above</button>
     <div id="cfgMsg" class="msgline"></div>
+  </div>
+
+  <div class="card" data-tab="settings">
+    <strong>↺ Start fresh</strong>
+    <p style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Reset just part of the hub. Everything else stays. This cannot be undone.</p>
+    <label class="switchrow" style="display:flex;align-items:center;gap:10px;font-size:15px;color:var(--ink);"><input type="checkbox" class="freshChk" value="points" style="width:22px;height:22px;flex:none;"><span>⭐ This week's points <span style="color:var(--muted);font-size:13px;">(bonuses, penalties, spending; checked chores stay)</span></span></label>
+    <label class="switchrow" style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:15px;color:var(--ink);"><input type="checkbox" class="freshChk" value="chores" style="width:22px;height:22px;flex:none;"><span>✅ Chores <span style="color:var(--muted);font-size:13px;">(all chores and their history)</span></span></label>
+    <label class="switchrow" style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:15px;color:var(--ink);"><input type="checkbox" class="freshChk" value="potty" style="width:22px;height:22px;flex:none;"><span>🚽 Pee Tracker <span style="color:var(--muted);font-size:13px;">(marks, streaks, bonuses)</span></span></label>
+    <label class="switchrow" style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:15px;color:var(--ink);"><input type="checkbox" class="freshChk" value="routines" style="width:22px;height:22px;flex:none;"><span>⏰ Get Ready lists <span style="color:var(--muted);font-size:13px;">(all items and their history)</span></span></label>
+    <input type="text" id="freshWord" placeholder="Type RESET to enable" autocomplete="off" style="margin-top:12px;">
+    <button style="width:100%;background:var(--err);" onclick="startFresh()">Reset the ticked parts</button>
+    <div id="freshMsg" class="msgline"></div>
   </div>
 
   <div class="card" data-tab="settings" style="border-color:var(--err);">
@@ -1398,11 +1410,8 @@ function renderChores(){
       <div style="display:flex;gap:6px;margin-top:8px;">
         ${[-5,-1,1,5].map(n => `<button class="ghost" style="flex:1;padding:8px 0;" onclick="adjustPts('${esc(m.id)}',${n})">${n > 0 ? '+' : '−'}${Math.abs(n)}</button>`).join('')}
       </div>
-      ${(st.rewards || []).length ? `<div style="display:flex;gap:6px;margin-top:8px;align-items:center;">
-        <span style="font-size:13px;color:var(--muted);flex:none;">🎁 ${st.spendable[m.id] || 0} to spend</span>
-        <select data-spend="${esc(m.id)}" style="margin:0;flex:1;">${st.rewards.map(r => `<option value="${esc(r.id)}">${esc(r.icon)} ${esc(r.name)} (${r.cost})</option>`).join('')}</select>
-        <button class="ghost" style="flex:none;padding:8px 12px;" data-m="${esc(m.id)}" onclick="spendPts(this.dataset.m)">Spend</button>
-      </div>` : ''}
+      <button class="ghost" style="width:100%;margin-top:8px;padding:8px 0;" data-m="${esc(m.id)}" data-n="${esc(m.name)}" onclick="nukePts(this.dataset.m, this.dataset.n)">☢️ Nuclear: week to 0</button>
+      ${(st.rewards || []).length ? `<div style="font-size:13px;color:var(--muted);margin-top:8px;">🎁 ${st.spendable[m.id] || 0} to spend in the Reward Shop</div>` : ''}
     </div>`;
   }).join('') || '<div class="empty">Add family members first (Family tab)</div>';
 
@@ -1513,9 +1522,9 @@ async function addSelectedIdeas(){
   await choreAct({action:'addRewardPack', names});
   show('choreMsg', '✓ Added ' + names.length + ' reward' + (names.length === 1 ? '' : 's'), true);
 }
-function spendPts(memberId){
-  const sel = document.querySelector(`select[data-spend="${CSS.escape(memberId)}"]`);
-  choreAct({action:'redeem', memberId, rewardId: sel.value});
+function nukePts(memberId, name){
+  if (confirm('☢️ Take every star ' + name + ' earned this week down to zero? The Portal shows the angry screen. You can undo it from the history below.'))
+    choreAct({action:'nuke', memberId});
 }
 let profSelId = '';
 function renderProfiles(st){
@@ -2649,6 +2658,21 @@ async function saveTabOrder(order){
     if (!r.ok) throw new Error(l.error || 'failed');
     tabOrder = l.tabOrder; renderTabOrder();
   } catch(e){ show('tabOrderMsg', e.message, false); }
+}
+async function startFresh(){
+  const scopes = [...document.querySelectorAll('.freshChk:checked')].map(c => c.value);
+  if (!scopes.length) return show('freshMsg', 'Tick what to reset', false);
+  if (document.getElementById('freshWord').value.trim() !== 'RESET') return show('freshMsg', 'Type RESET (all capitals) first', false);
+  if (!confirm('Reset the ticked parts? This cannot be undone.')) return;
+  try {
+    const r = await fetch('/api/reset/data', {method:'POST', body: JSON.stringify({confirm:'RESET', scopes})});
+    const b = await r.json();
+    if (!r.ok) throw new Error(b.error || 'failed');
+    document.querySelectorAll('.freshChk').forEach(c => c.checked = false);
+    document.getElementById('freshWord').value = '';
+    show('freshMsg', '✓ Done', true);
+    loadChores();
+  } catch(e){ show('freshMsg', e.message, false); }
 }
 async function resetPortal(){
   const word = document.getElementById('resetWord').value.trim();

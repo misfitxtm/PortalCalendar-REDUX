@@ -24,6 +24,18 @@ object Shopping {
         "Kitchen & home" to listOf("Aluminum foil", "Plastic wrap", "Zip bags", "Napkins",
             "Coffee filters", "Light bulbs", "Batteries"))
 
+    /** The list as a Markdown checklist (to buy first, then checked off), for saving to a phone. Items are (name, done). */
+    fun markdown(items: List<Pair<String, Boolean>>, today: String): String {
+        val (done, todo) = items.partition { it.second }
+        fun line(i: Pair<String, Boolean>, box: String) = "- [$box] " + i.first.replace(Regex("\\s+"), " ").trim()
+        return buildString {
+            append("# 🛒 Shopping list\n\n_Saved $today · ${todo.size} to buy, ${done.size} checked off_\n\n")
+            todo.forEach { append(line(it, " ")).append('\n') }
+            done.forEach { append(line(it, "x")).append('\n') }
+            if (items.isEmpty()) append("Nothing on the list.\n")
+        }
+    }
+
     fun statusJson(ctx: Context): String = JSONObject()
         .put("items", Data.readArray(ctx, FILE))
         .put("presets", JSONObject().also { o -> PRESETS.forEach { (k, v) -> o.put(k, JSONArray(v)) } })

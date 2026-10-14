@@ -92,6 +92,14 @@ class ConfigServer(
             onConfigChanged()
             json("{\"ok\":true}")
         }
+        s.uri == "/api/reset/data" && s.method == Method.POST -> {
+            // Wipes part of the hub. Same typed-word rule as the full reset.
+            val o = org.json.JSONObject(readBody(s))
+            if (o.optString("confirm") != "RESET") throw IllegalArgumentException("type RESET to confirm")
+            val a = o.optJSONArray("scopes") ?: org.json.JSONArray()
+            Resets.run(ctx, Resets.parse((0 until a.length()).map { a.getString(it) }))
+            json("{\"ok\":true}")
+        }
         s.uri == "/api/voice" && s.method == Method.GET ->
             json(voiceJson())
         s.uri == "/api/voice" && s.method == Method.POST -> {
@@ -102,6 +110,12 @@ class ConfigServer(
             App.instance.notifyDataChanged()
             json(voiceJson())
         }
+        // Opened by the shopping-list QR. The gate lets /dl/ through, so the short-lived code is the only check here.
+        s.uri == "/dl/shopping-list.md" && s.method == Method.GET ->
+            if (!DownloadLink.valid(s.param("c"))) resp(401, "text/plain", "this link has expired — scan the QR code again")
+            else resp(200, "text/markdown", Shopping.markdown(
+                Data.readArray(ctx, "shopping.json").let { a -> (0 until a.length()).map { a.getJSONObject(it).let { o -> o.optString("name") to o.optBoolean("done") } } },
+                java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())))
         s.uri == "/api/shopping" && s.method == Method.GET ->
             json(Shopping.statusJson(ctx))
         s.uri == "/api/shopping" && s.method == Method.POST ->
