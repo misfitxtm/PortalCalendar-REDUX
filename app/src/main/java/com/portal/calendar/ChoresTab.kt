@@ -29,7 +29,9 @@ class ChoresTab(
         { _, _, action -> action() },
     private val onRemoveChore: (id: String, label: String) -> Unit = { _, _ -> },
     /** Fired when a card is *checked off* (not un-done); [goalReached] when this star hit the weekly goal. */
-    private val onCelebrate: (anchor: View, goalReached: Boolean) -> Unit = { _, _ -> }
+    private val onCelebrate: (anchor: View, goalReached: Boolean) -> Unit = { _, _ -> },
+    /** Tap on a member's points badge: parent adds or removes points. */
+    private val onAdjust: (anchor: View, memberId: String, name: String) -> Unit = { _, _, _ -> }
 ) {
 
     private lateinit var columnsRow: LinearLayout
@@ -136,11 +138,15 @@ class ChoresTab(
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             }, LinearLayout.LayoutParams(0, WRAP, 1f))
-            head.addView(TextView(ctx).apply {
-                text = "⭐ $starCount/$goal"
+            // "Anyone" chores earn nobody points, so that column has no badge or bar.
+            if (mid.isNotEmpty()) head.addView(TextView(ctx).apply {
+                text = "⭐ $starCount/$goal ±"
                 textSize = 15f
                 setTextColor(INK)
                 typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                setPadding(dp(10), dp(6), dp(10), dp(6))
+                background = rounded(PILL, 14)
+                setOnClickListener { onAdjust(this, mid, name) }
             })
             col.addView(head, lp(bottom = dp(8)))
 
@@ -153,7 +159,7 @@ class ChoresTab(
             if (frac > 0f) track.addView(View(ctx).apply { background = rounded(color, 5) },
                 LinearLayout.LayoutParams(0, dp(10), frac))
             track.addView(View(ctx), LinearLayout.LayoutParams(0, dp(10), 1f - frac))
-            col.addView(track, lp(bottom = dp(12)))
+            if (mid.isNotEmpty()) col.addView(track, lp(bottom = dp(12)))
 
             // Chore cards -----------------------------------------------------
             val cardsBox = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
