@@ -31,6 +31,16 @@ fn http(port: u16, head: &str, body: &str) -> String {
 }
 
 #[test]
+fn bare_address_without_sign_in_explains_how_to_sign_in() {
+    let (s, p) = start();
+    let r = http(p, &format!("GET / HTTP/1.1\r\nHost: 127.0.0.1:{p}"), "");
+    assert!(r.starts_with("HTTP/1.1 401") && r.contains("QR code") && r.contains("text/html"), "{r}");
+    let api = http(p, &format!("GET /api/export HTTP/1.1\r\nHost: 127.0.0.1:{p}"), "");
+    assert!(api.ends_with("unauthorized"), "{api}"); // APIs stay terse
+    s.stop();
+}
+
+#[test]
 fn no_cookie_is_401() {
     let (s, p) = start();
     let r = http(p, &format!("GET /api/export HTTP/1.1\r\nHost: 127.0.0.1:{p}"), "");
@@ -42,8 +52,9 @@ fn no_cookie_is_401() {
 fn qr_link_sets_cookie_then_api_works() {
     let (s, p) = start();
     let r = http(p, &format!("GET /?t={T} HTTP/1.1\r\nHost: 127.0.0.1:{p}"), "");
-    assert!(r.starts_with("HTTP/1.1 303"), "{r}");
+    assert!(r.starts_with("HTTP/1.1 200"), "{r}"); // not a redirect: see server.rs
     assert!(r.contains("SameSite=Strict") && r.contains("HttpOnly"), "{r}");
+    assert!(r.contains("location.replace") && !r.to_lowercase().contains("\r\nlocation:"), "{r}");
     let r = http(p, &format!("POST /api/x HTTP/1.1\r\nHost: 127.0.0.1:{p}\r\nCookie: pt={T}"), "hello");
     assert!(r.starts_with("HTTP/1.1 200") && r.ends_with("hello"), "{r}");
     assert!(r.to_lowercase().contains("x-content-type-options: nosniff"), "{r}");
