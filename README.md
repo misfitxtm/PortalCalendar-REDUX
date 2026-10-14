@@ -65,7 +65,9 @@ adb shell am start -n com.portalhub.redux/com.portal.calendar.MainActivity
 adb shell appops set com.portalhub.redux GET_USAGE_STATS allow
 ```
 
-3. Scan the QR code on the Portal with your phone. That opens the setup page and signs it in.
+3. On the Portal tap **⚙ Settings** (it asks for the parent PIN), then scan the QR code with your phone's
+   camera and open the link in your browser. That opens the setup page and signs it in. If you reinstall
+   the app the code changes, so scan the new one; an old bookmark or home-screen icon won't sign in.
 
 **Already running the original PortalHub?** This fork has its own app id (`com.portalhub.redux`), so
 both can be installed, but they both use port 8090, so stop or remove the original first. Your data

@@ -12,6 +12,20 @@ use tiny_http::{Header, Request};
 pub const MAX_BODY: usize = 16 * 1024 * 1024;
 const WORKERS: usize = 4;
 
+const SIGNING_IN: &str = "<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\
+<meta http-equiv=\"refresh\" content=\"0;url=/\"><title>Signing in</title>\
+<body style=\"font-family:sans-serif;padding:40px\"><p>Signing in…</p>\
+<script>location.replace(\"/\")</script><noscript><p><a href=\"/\">Continue</a></p></noscript>";
+
+const SIGN_IN_HELP: &str = "<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\
+<title>Sign in to your Portal</title><body style=\"font-family:sans-serif;max-width:32em;margin:40px auto;padding:0 20px;line-height:1.5\">\
+<h2>Sign in to your Portal</h2>\
+<p>This page needs a sign-in link from the Portal itself.</p>\
+<ol><li>On the Portal, tap <b>⚙ Settings</b> and enter the parent PIN.</li>\
+<li>Scan the QR code shown there with this phone's camera, and open the link in your browser.</li></ol>\
+<p>Already did that? Your link may be old: the code changes if the app was reinstalled, so scan the current one. \
+Open it in a normal browser, not inside another app.</p>";
+
 pub struct Response {
     pub status: u16,
     pub content_type: String,
@@ -82,10 +96,17 @@ fn serve(mut req: Request, gate: &Gate, handler: &dyn Handler) {
         authorization: header(&req, "Authorization"),
     });
     match verdict {
+        Verdict::Reject(401, _) if method == "GET" && path == "/" => {
+            // Someone opened the bare address: tell them how to sign in instead of a bare "unauthorized".
+            return reply(req, 401, "text/html; charset=utf-8", SIGN_IN_HELP.as_bytes().to_vec(), &[]);
+        }
         Verdict::Reject(code, msg) => return reply(req, code, "text/plain", msg.as_bytes().to_vec(), &[]),
         Verdict::Bootstrap => {
             let cookie = format!("pt={}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000", gate.token());
-            return reply(req, 303, "text/plain", Vec::new(), &[("Location", "/"), ("Set-Cookie", &cookie)]);
+            // 200 plus a hop made by the page itself, not a 303: a redirect that begins in another app
+            // (a QR scanner, a chat link) counts as cross-site, and the browser would then withhold the
+            // SameSite=Strict cookie from the redirected request.
+            return reply(req, 200, "text/html; charset=utf-8", SIGNING_IN.as_bytes().to_vec(), &[("Set-Cookie", &cookie)]);
         }
         Verdict::Allow => {}
     }
