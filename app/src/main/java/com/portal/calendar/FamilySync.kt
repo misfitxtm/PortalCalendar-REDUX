@@ -52,7 +52,7 @@ object FamilySync {
     /** Prefs that must survive a full-mirror import — sync identity + this device's physical traits. */
     private val LOCAL_PREFS = setOf(
         "sync_role", "sync_hub_manual", "sync_mirror_all", "sync_full_hash",
-        "idle_mode", "idle_yield_min", "idle_takeover", "ui_scale", "orientation")
+        "idle_mode", "idle_yield_min", "idle_takeover", "ui_scale", "orientation", "sync_hub_token")
 
     private val pushExec = Executors.newSingleThreadExecutor()
     private val pullExec = Executors.newSingleThreadExecutor()
@@ -65,14 +65,23 @@ object FamilySync {
     fun isSpoke(ctx: Context) = role(ctx) == ROLE_SPOKE
     fun isHub(ctx: Context) = role(ctx) == ROLE_HUB
     fun mirrorAll(ctx: Context) = prefs(ctx).getBoolean("sync_mirror_all", false)
+    /** The hub's pairing code, kept sealed. Null when this Portal isn't paired. */
+    fun hubToken(ctx: Context): String? =
+        Secrets.open(prefs(ctx).getString("sync_hub_token", null))?.takeIf { it.isNotEmpty() }
+
     fun manualHub(ctx: Context): String = (prefs(ctx).getString("sync_hub_manual", "") ?: "").trim()
 
     private val discovered = Collections.synchronizedSet(LinkedHashSet<String>()) // "ip:port"
 
-    /** Effective hub base URL: a typed-in address wins, else the auto-discovered one. */
+    /**
+     * Effective hub base URL: a typed-in address wins, else the auto-discovered one. A paired spoke
+     * only ever talks to the address typed in: anyone on the Wi-Fi can advertise a hub over mDNS,
+     * and the pairing code must never be sent to an address nobody chose.
+     */
     fun hubUrl(ctx: Context): String? {
         val m = manualHub(ctx)
         val hostPort = if (m.isNotEmpty()) normalizeHostPort(m)
+                       else if (hubToken(ctx) != null) null
                        else synchronized(discovered) { discovered.firstOrNull() }
         return hostPort?.let { "http://$it" }
     }
@@ -83,8 +92,15 @@ object FamilySync {
         return s
     }
 
-    fun setConfig(ctx: Context, role: String?, manualHub: String?, mirror: Boolean?) {
+    /** [hubToken]: null leaves it alone, "" removes it, anything else must be the hub's hex pairing code. */
+    fun setConfig(ctx: Context, role: String?, manualHub: String?, mirror: Boolean?, hubToken: String? = null) {
         val e = prefs(ctx).edit()
+        hubToken?.trim()?.lowercase()?.let { t ->
+            if (t.isEmpty()) e.remove("sync_hub_token")
+            else if (!Regex("[0-9a-f]{32,128}").matches(t))
+                throw IllegalArgumentException("that isn't a pairing code — copy it from the hub's Family tab")
+            else e.putString("sync_hub_token", Secrets.seal(t))
+        }
         role?.let { e.putString("sync_role", if (it in listOf(ROLE_SOLO, ROLE_HUB, ROLE_SPOKE)) it else ROLE_SOLO) }
         manualHub?.let { e.putString("sync_hub_manual", it.trim()) }
         mirror?.let { e.putBoolean("sync_mirror_all", it) }
@@ -200,7 +216,7 @@ object FamilySync {
     /** Pull the hub's shared family files and overwrite local copies that differ. */
     private fun pullSnapshot(ctx: Context) {
         val base = hubUrl(ctx) ?: return
-        val txt = httpGet("$base/api/family") ?: return
+        val txt = httpGet("$base/api/family", hubToken(ctx)) ?: return
         val obj = JSONObject(txt)
         var changed = false
         for (name in SHARED_FILES) {
@@ -215,7 +231,7 @@ object FamilySync {
     /** Mirror-all: pull the hub's whole config bundle (feeds, theme, creds…), keeping local identity. */
     private fun pullFull(ctx: Context) {
         val base = hubUrl(ctx) ?: return
-        val code = httpGet("$base/api/family/full") ?: return
+        val code = httpGet("$base/api/family/full", hubToken(ctx)) ?: return
         val h = code.hashCode().toString()
         if (h == prefs(ctx).getString("sync_full_hash", "")) return // unchanged since last import
         importPreservingLocal(ctx, code)
@@ -250,7 +266,7 @@ object FamilySync {
         if (!isSpoke(ctx)) return
         pushExec.execute {
             val base = hubUrl(ctx) ?: return@execute
-            runCatching { httpPost("$base/api/$domain", payload) }
+            runCatching { httpPost("$base/api/$domain", payload, hubToken(ctx)) }
             runCatching { pullSnapshot(ctx) }
         }
     }
@@ -270,6 +286,9 @@ object FamilySync {
     fun statusJson(ctx: Context): String = JSONObject()
         .put("role", role(ctx))
         .put("mirrorAll", mirrorAll(ctx))
+        .put("paired", hubToken(ctx) != null)
+        // Only a hub shows its code: it lets another Portal act as this one's follower (and edit it).
+        .put("pairingCode", if (isHub(ctx)) ConfigStore(ctx).serverToken() else "")
         .put("manualHub", manualHub(ctx))
         .put("hubUrl", hubUrl(ctx) ?: "")
         .put("myAddress", (myIp(ctx) ?: "?") + ":" + ConfigServer.PORT)
@@ -285,18 +304,20 @@ object FamilySync {
 
     // ----------------------------------------------------------- http
 
-    private fun httpGet(urlStr: String): String? {
+    private fun httpGet(urlStr: String, token: String?): String? {
         val conn = URL(urlStr).openConnection() as HttpURLConnection
         conn.connectTimeout = 3_000; conn.readTimeout = 6_000
+        token?.let { conn.setRequestProperty("Authorization", "Bearer $it") }
         return try {
             if (conn.responseCode !in 200..299) null
             else conn.inputStream.bufferedReader().readText()
         } catch (e: Exception) { null } finally { conn.disconnect() }
     }
 
-    private fun httpPost(urlStr: String, body: String): String? {
+    private fun httpPost(urlStr: String, body: String, token: String?): String? {
         val conn = URL(urlStr).openConnection() as HttpURLConnection
         conn.connectTimeout = 3_000; conn.readTimeout = 6_000
+        token?.let { conn.setRequestProperty("Authorization", "Bearer $it") }
         conn.requestMethod = "POST"; conn.doOutput = true
         conn.setRequestProperty("Content-Type", "application/json")
         return try {

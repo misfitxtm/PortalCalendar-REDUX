@@ -23,9 +23,12 @@ import kotlin.math.roundToInt
  */
 class PottyTab(
     private val ctx: Context,
+    /** Fired when marking a day reaches a milestone; [big] for the 3-week goal. */
+    private val onCelebrate: (anchor: android.view.View, big: Boolean) -> Unit = { _, _ -> },
     private val onGate: (action: () -> Unit) -> Unit
 ) {
     private var selected = ""
+    private var streakAnchor: android.view.View? = null
     private var month: YearMonth = YearMonth.now()
     val view: LinearLayout = LinearLayout(ctx).apply {
         orientation = LinearLayout.VERTICAL
@@ -90,6 +93,7 @@ class PottyTab(
         val streak = me.getInt("streak")
         val card = card()
         card.addView(TextView(ctx).apply {
+            streakAnchor = this
             text = "🔥 $streak"
             textSize = 54f
             setTextColor(INK)
@@ -109,8 +113,21 @@ class PottyTab(
             LinearLayout.LayoutParams(0, dp(14), frac))
         track.addView(android.view.View(ctx), LinearLayout.LayoutParams(0, dp(14), 1f - frac))
         card.addView(track, lp(bottom = dp(8)))
+        // Milestone chips: filled once earned.
+        val chips = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        for (m in Rules.POTTY_MILESTONES) chips.addView(TextView(ctx).apply {
+            val earned = streak >= m
+            text = if (earned) "⭐ $m" else "$m"
+            textSize = 13f
+            setTextColor(if (earned) Color.WHITE else MUTED)
+            background = rounded(if (earned) color else PILL, 14)
+            setPadding(dp(10), dp(5), dp(10), dp(5))
+        }, LinearLayout.LayoutParams(WRAP, WRAP).apply { setMargins(dp(3), 0, dp(3), 0) })
+        card.addView(chips, lp(bottom = dp(8)))
         card.addView(TextView(ctx).apply {
-            text = if (me.getBoolean("done")) "🎉 3 weeks dry — amazing!" else "${goal - streak} more days to $goal (3 weeks)"
+            val next = Rules.nextPottyMilestone(streak)
+            text = if (next == null) "🎉 3 weeks dry — amazing!"
+                   else "Next: $next days · ${next - streak} to go" + if (next == goal) " (3 weeks)" else ""
             textSize = 15f
             setTextColor(INK)
             gravity = Gravity.CENTER
@@ -203,9 +220,17 @@ class PottyTab(
     }
 
     private fun mark(me: JSONObject, date: LocalDate, state: String) = onGate {
+        val before = me.getInt("streak")
         runCatching {
             Potty.mutate(ctx, JSONObject().put("action", "mark").put("memberId", me.getString("id"))
                 .put("date", date.toString()).put("state", state))
+        }.onSuccess { status ->
+            val after = JSONObject(status).getJSONArray("members").let { a ->
+                (0 until a.length()).map { a.getJSONObject(it) }.firstOrNull { it.getString("id") == me.getString("id") }
+            }?.getInt("streak") ?: return@onSuccess
+            Rules.pottyMilestoneReached(before, after)?.let { m ->
+                streakAnchor?.let { onCelebrate(it, m == Rules.POTTY_GOAL_DAYS) }
+            }
         }
     }
 

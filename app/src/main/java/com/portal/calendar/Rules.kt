@@ -9,6 +9,21 @@ object Rules {
     /** A potty streak of this many days (3 weeks) completes the goal. */
     const val POTTY_GOAL_DAYS = 21
 
+    /** The recap of last week's points shows on the first two days of a new points week, until dismissed. */
+    fun recapDue(today: LocalDate, dismissedWeekStart: String?): Boolean {
+        val start = pointsWeekStart(today)
+        return java.time.temporal.ChronoUnit.DAYS.between(start, today) <= 1 && dismissedWeekStart != start.toString()
+    }
+
+    /** Small wins on the way to the 3-week goal; the last one is the goal itself. */
+    val POTTY_MILESTONES = listOf(3, 7, 14, POTTY_GOAL_DAYS)
+
+    /** The biggest milestone crossed by going from [before] to [after] dry days, if any. */
+    fun pottyMilestoneReached(before: Int, after: Int): Int? =
+        POTTY_MILESTONES.lastOrNull { before < it && after >= it }
+
+    fun nextPottyMilestone(streak: Int): Int? = POTTY_MILESTONES.firstOrNull { it > streak }
+
     /** Chore points reset every Friday: the week runs Friday through Thursday. */
     fun pointsWeekStart(day: LocalDate): LocalDate =
         day.with(TemporalAdjusters.previousOrSame(DayOfWeek.FRIDAY))

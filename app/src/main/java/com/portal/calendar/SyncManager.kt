@@ -3,15 +3,10 @@ package com.portal.calendar
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import biweekly.Biweekly
-import biweekly.component.VEvent
 import java.io.File
 import java.net.HttpURLConnection
 import java.security.MessageDigest
-import java.util.Date
-import java.util.TimeZone
 import java.util.concurrent.Executors
-import kotlin.math.max
 
 data class EventInstance(
     val start: Long,
@@ -29,7 +24,7 @@ data class EventInstance(
 
 /**
  * Fetches each configured ICS feed, caches the raw text on disk (so the board
- * still shows events after a reboot with no network), parses with biweekly and
+ * still shows events after a reboot with no network), parses with the Rust core and
  * expands recurrences into concrete instances inside a rolling window.
  */
 class SyncManager(private val ctx: Context, private val store: ConfigStore) {
@@ -45,7 +40,7 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
                 val text = fetchWithCache(feed, problems) ?: continue
                 try {
                     if (feed.kind == "inbox") processInbox(text)
-                    else all.addAll(parseFeed(text, feed))
+                    else all.addAll(parseFeed(text, feed, problems))
                 } catch (e: Exception) {
                     problems.add("${feed.name}: unreadable feed (${e.javaClass.simpleName})")
                 }
@@ -91,83 +86,44 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
         }
     }
 
-    private fun parseFeed(text: String, feed: FeedConfig): List<EventInstance> {
+    private fun parseFeed(text: String, feed: FeedConfig, problems: MutableList<String>? = null): List<EventInstance> {
         val out = ArrayList<EventInstance>()
-        val tz = TimeZone.getDefault()
         val now = System.currentTimeMillis()
         val windowStart = now - 35L * DAY_MS
         val windowEnd = now + 180L * DAY_MS
         // UIDs the user deleted from the board — keep them hidden until the
         // source feed catches up (Google's secret iCal can lag hours).
         val suppressed = DeletedEvents.activeUids(ctx)
+        val parsed = IcsEvents.parse(text, windowStart, windowEnd)
+        if (parsed.skipped > 0) problems?.add("${feed.name}: ${parsed.skipped} event(s) couldn't be read and were skipped")
 
-        for (ical in Biweekly.parse(text).all()) {
-            // Instances of a recurring series that were individually edited carry a
-            // RECURRENCE-ID; the master series must skip those occurrences.
-            val overridden = HashMap<String, MutableSet<Long>>()
-            for (e in ical.events) {
-                val rid = e.recurrenceId ?: continue
-                val uid = e.uid?.value ?: continue
-                overridden.getOrPut(uid) { HashSet() }.add(rid.value.time)
+        for (e in parsed.events) {
+            if (e.cancelled) continue
+            if (e.uid.isNotEmpty() && e.uid in suppressed) continue // deleted from the board
+
+            // Magic-word events route to lists/chores and never render.
+            val magic = MagicWords.match(e.summary)
+            if (magic != null) {
+                val uid = e.uid.ifEmpty { feed.url + e.summary }
+                // Mark AFTER a successful execute so a failed command
+                // retries next sync instead of being consumed silently.
+                if (!MagicWords.isProcessed(ctx, uid)) {
+                    runCatching { MagicWords.execute(ctx, magic, e.startMs) }
+                        .onSuccess { MagicWords.markProcessed(ctx, uid) }
+                }
+                continue
             }
 
-            for (e in ical.events) {
-                if (e.status?.value?.equals("CANCELLED", true) == true) continue
-                val ds = e.dateStart ?: continue
-
-                val evUid = e.uid?.value ?: ""
-                if (evUid.isNotEmpty() && evUid in suppressed) continue // deleted from the board
-
-                // Magic-word events route to lists/chores and never render.
-                val magic = MagicWords.match(e.summary?.value ?: "")
-                if (magic != null) {
-                    val uid = e.uid?.value ?: (feed.url + (e.summary?.value ?: ""))
-                    // Mark AFTER a successful execute so a failed command
-                    // retries next sync instead of being consumed silently.
-                    if (!MagicWords.isProcessed(ctx, uid)) {
-                        runCatching { MagicWords.execute(ctx, magic, ds.value.time) }
-                            .onSuccess { MagicWords.markProcessed(ctx, uid) }
-                    }
-                    continue
-                }
-
-                val allDay = !ds.value.hasTime()
-                val durMs = durationMs(e, allDay)
-                val title = e.summary?.value?.trim().takeUnless { it.isNullOrEmpty() } ?: "(untitled)"
-                val loc = e.location?.value?.trim().takeUnless { it.isNullOrEmpty() }
-
-                if (e.recurrenceId != null) {
-                    // Edited single instance: add as-is (part of a series).
-                    val s = ds.value.time
-                    if (s + durMs >= windowStart && s <= windowEnd)
-                        out.add(EventInstance(s, s + durMs, allDay, title, loc, feed.name, feed.color, evUid, true))
-                    continue
-                }
-
-                val recurring = e.recurrenceRule != null || e.recurrenceDates.isNotEmpty()
-                if (!recurring) {
-                    val s = ds.value.time
-                    if (s + durMs >= windowStart && s <= windowEnd)
-                        out.add(EventInstance(s, s + durMs, allDay, title, loc, feed.name, feed.color, evUid, false))
-                } else {
-                    val skips = e.uid?.value?.let { overridden[it] }
-                    // Honors RRULE + RDATE + EXDATE. Expand in the EVENT's own
-                    // timezone — using the device zone shifts a foreign-TZID
-                    // feed's occurrences (sometimes a whole day) and breaks
-                    // EXDATE/RECURRENCE-ID matching across DST mismatches.
-                    val etz = ical.timezoneInfo.getTimezone(ds)?.timeZone ?: tz
-                    val it2 = e.getDateIterator(etz)
-                    it2.advanceTo(Date(windowStart - max(durMs, DAY_MS)))
-                    var guard = 0
-                    while (it2.hasNext() && guard < 2000) {
-                        guard++
-                        val occ = it2.next()
-                        if (occ.time > windowEnd) break
-                        if (occ.time + durMs < windowStart) continue
-                        if (skips?.contains(occ.time) == true) continue
-                        out.add(EventInstance(occ.time, occ.time + durMs, allDay, title, loc, feed.name, feed.color, evUid, true))
-                    }
-                }
+            val title = e.summary.trim().ifEmpty { "(untitled)" }
+            val loc = e.location.trim().ifEmpty { null }
+            when {
+                // Edited single instance of a series, or a one-off event: shown if it overlaps the window.
+                e.recurrenceIdMs != null || !e.recurring ->
+                    if (e.inWindow) out.add(EventInstance(e.startMs, e.startMs + e.durationMs, e.allDay, title, loc,
+                        feed.name, feed.color, e.uid, e.recurrenceIdMs != null))
+                // Series master: the occurrences were expanded natively (RRULE + RDATE - EXDATE - edited instances).
+                else -> for (t in e.instances)
+                    out.add(EventInstance(t, t + e.durationMs, e.allDay, title, loc, feed.name, feed.color, e.uid, true))
             }
         }
         return out
@@ -195,7 +151,7 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
                 if (!text.contains("BEGIN:VCALENDAR"))
                     throw IllegalArgumentException(
                         "that link isn't a calendar feed — it should end in .ics or start with webcal://")
-                return Biweekly.parse(text).all().sumOf { it.events.size }
+                return IcsEvents.parse(text, 0, 0).events.size
             } finally {
                 conn.disconnect()
             }
@@ -208,35 +164,17 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
 
     /** Inbox calendars: every event is a command, parsed loosely, never rendered. */
     private fun processInbox(text: String) {
-        for (ical in Biweekly.parse(text).all()) {
-            for (e in ical.events) {
-                if (e.status?.value?.equals("CANCELLED", true) == true) continue
-                val title = e.summary?.value?.trim().orEmpty()
-                if (title.isEmpty()) continue
-                val uid = e.uid?.value ?: title
-                if (MagicWords.isProcessed(ctx, uid)) continue
-                // Mark only after success — a failed command retries next sync.
-                runCatching {
-                    MagicWords.execute(ctx, MagicWords.parseSmart(ctx, title),
-                        e.dateStart?.value?.time ?: System.currentTimeMillis())
-                }.onSuccess { MagicWords.markProcessed(ctx, uid) }
-            }
+        val now = System.currentTimeMillis()
+        for (e in IcsEvents.parse(text, now - 35L * DAY_MS, now + 180L * DAY_MS).events) {
+            if (e.cancelled) continue
+            val title = e.summary.trim()
+            if (title.isEmpty()) continue
+            val uid = e.uid.ifEmpty { title }
+            if (MagicWords.isProcessed(ctx, uid)) continue
+            // Mark only after success — a failed command retries next sync.
+            runCatching { MagicWords.execute(ctx, MagicWords.parseSmart(ctx, title), e.startMs) }
+                .onSuccess { MagicWords.markProcessed(ctx, uid) }
         }
-    }
-
-    private fun durationMs(e: VEvent, allDay: Boolean): Long {
-        val start = e.dateStart?.value?.time ?: return 0
-        e.dateEnd?.value?.time?.let { return max(0, it - start) }
-        e.duration?.value?.let { return it.toMillis() }
-        if (allDay) {
-            // One CALENDAR day, not a fixed 24h — a fixed span spills onto the
-            // next day across DST and double-renders the event.
-            val c = java.util.Calendar.getInstance()
-            c.timeInMillis = start
-            c.add(java.util.Calendar.DAY_OF_MONTH, 1)
-            return c.timeInMillis - start
-        }
-        return 0
     }
 
     private fun md5(s: String): String =

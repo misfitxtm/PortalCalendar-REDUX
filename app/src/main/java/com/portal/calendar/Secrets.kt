@@ -43,7 +43,7 @@ object SecretBox {
 object Secrets {
     private const val ALIAS = "portalhub_secrets"
     /** Prefs holding secrets. The pairing token is deliberately not here: it is shown on screen in the QR code. */
-    val KEYS = setOf("icloud_password", "g_client_secret", "g_refresh", "g_access", "ai_key")
+    val KEYS = setOf("icloud_password", "g_client_secret", "g_refresh", "g_access", "ai_key", "sync_hub_token")
 
     private val key: SecretKey by lazy {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }

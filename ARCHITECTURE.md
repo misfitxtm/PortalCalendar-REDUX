@@ -178,7 +178,7 @@ modules within the single APK.
 
 ### Supporting in-process modules
 - **SyncManager** — periodically fetches configured iCal feeds, parses them
-  (biweekly), expands recurrence, applies tombstones, and publishes event
+  (the Rust core, `core/src/ics.rs`), expands recurrence, applies tombstones, and publishes event
   instances to the board.
 - **Writers / CalDav / GoogleCal / GoogleTasks** — two-way calendar/task writes.
 - **FamilySync** — hub-and-spoke LAN replication (see §4 / §5).
@@ -236,7 +236,7 @@ everything else is optional and user-supplied.
 
 | Service | Purpose | Integration method | Auth |
 |---|---|---|---|
-| **iCal / webcal feeds** | Read everyone's calendars (Google secret iCal, iCloud public, any `.ics`) | `SyncManager` HTTP GET + **biweekly** parse (RRULE/EXDATE) | none (secret URL) |
+| **iCal / webcal feeds** | Read everyone's calendars (Google secret iCal, iCloud public, any `.ics`) | `SyncManager` HTTP GET + Rust parse (`core/src/ics.rs`: RRULE/EXDATE) | none (secret URL) |
 | **Google Calendar API** (`calendar/v3`) | Two-way event create/delete | REST via `GoogleCal` | OAuth2 (user's own Desktop client; `g_refresh` token) |
 | **Google OAuth2** (`accounts.google.com`, `oauth2.googleapis.com`) | Obtain/refresh Google tokens | code → token exchange; localhost/Portal-IP redirect | OAuth2 |
 | **Google Tasks API** (`tasks/v1`) | Two-way sync of a shared list ↔ a Tasks list | REST via `GoogleTasks` | OAuth2 (`auth/tasks`) |
@@ -335,8 +335,8 @@ ANDROID_HOME=/path/to/android-sdk \
 
 # Install + launch on a Portal with ADB enabled:
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n com.portal.calendar/.MainActivity
-# Optional (takeover guard): adb shell appops set com.portal.calendar GET_USAGE_STATS allow
+adb shell am start -n com.portalhub.redux/com.portal.calendar.MainActivity
+# Optional (takeover guard): adb shell appops set com.portalhub.redux GET_USAGE_STATS allow
 ```
 `local.properties` holds the SDK path and is git-ignored. Wireless ADB
 (`adb tcpip 5555` → `adb connect <ip>:5555`) works but does not survive a Portal
@@ -404,7 +404,7 @@ reboot.
 | **Inbox calendar** | A dedicated feed whose every event is treated as a command, with no prefix needed. |
 | **CalDAV** | The protocol used to write to iCloud calendars (PROPFIND/PUT). |
 | **ICS / webcal** | iCalendar feed format / its `webcal://` URL scheme; the read path for all calendars. |
-| **RRULE / EXDATE / RECURRENCE-ID** | iCalendar recurrence rule / excluded dates / per-instance override; expanded by biweekly. |
+| **RRULE / EXDATE / RECURRENCE-ID** | iCalendar recurrence rule / excluded dates / per-instance override; expanded by the Rust core. |
 | **mDNS / NSD** | Multicast DNS service discovery (`android.net.nsd`) used to find the sync hub on the LAN. |
 | **Dream** | Android's term for a screensaver (`ACTION_DREAMING_STARTED/STOPPED`). |
 | **ADB** | Android Debug Bridge; used for install and one-time permission grants. |
@@ -419,7 +419,7 @@ reboot.
 
 | Field | Value |
 |---|---|
-| **Project name** | PortalHub (app id `com.portal.calendar`; Gradle root name "Family Calendar") |
+| **Project name** | PortalHub (upstream app id `com.portal.calendar`, this fork `com.portalhub.redux`; Gradle root name "Family Calendar") |
 | **Version** | 3.5.1 (`versionCode` 26) |
 | **Repository** | https://github.com/thefloppytaco/portal-calendar |
 | **Releases** | https://github.com/thefloppytaco/portal-calendar/releases |

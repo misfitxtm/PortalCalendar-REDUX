@@ -1,4 +1,5 @@
 import java.security.MessageDigest
+import java.util.Properties
 
 plugins {
   id("com.android.application")
@@ -10,19 +11,40 @@ android {
   ndkVersion = "29.0.14206865"
 
   defaultConfig {
-    applicationId = "com.portal.calendar"
+    // Own id so this installs next to (and never collides with) the original PortalHub. The code package stays com.portal.calendar.
+    applicationId = "com.portalhub.redux"
     minSdk = 28
     // Portal+ gen-1 is API 28; staying at 28 avoids newer background restrictions.
     targetSdk = 28
-    versionCode = 27
-    versionName = "4.0.0-redux.1"
+    versionCode = 28
+    versionName = "4.0.0-redux.2"
     // The Portal is arm64 only; this also keeps Vosk's native libraries from bloating the APK.
     ndk { abiFilters += "arm64-v8a" }
+  }
+
+  lint {
+    // targetSdk 28 is deliberate (Portal screen takeover); this app is sideloaded, never on Google Play.
+    disable += "ExpiredTargetSdkVersion"
+  }
+
+  // The release key lives outside the repo (see docs/RELEASING.md). Without it, `assembleRelease` makes an unsigned APK.
+  signingConfigs {
+    val f = file(System.getenv("PORTALHUB_SIGNING") ?: "${System.getProperty("user.home")}/.config/portalhub/signing.properties")
+    if (f.exists()) {
+      val p = Properties().apply { f.inputStream().use { load(it) } }
+      create("release") {
+        storeFile = file(p.getProperty("storeFile"))
+        storePassword = p.getProperty("storePassword")
+        keyAlias = p.getProperty("keyAlias")
+        keyPassword = p.getProperty("keyPassword")
+      }
+    }
   }
 
   buildTypes {
     release {
       isMinifyEnabled = false
+      signingConfig = signingConfigs.findByName("release")
     }
   }
 
@@ -39,8 +61,6 @@ dependencies {
   implementation("net.java.dev.jna:jna:5.13.0@aar")
   // QR code for the setup URL.
   implementation("com.google.zxing:core:3.5.3")
-  // iCalendar parsing incl. RRULE/EXDATE recurrence expansion. Pure Java, Android-safe.
-  implementation("net.sf.biweekly:biweekly:0.6.8")
   // CalDAV (PROPFIND/PUT) — HttpURLConnection can't send PROPFIND.
   implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }
@@ -84,4 +104,7 @@ val fetchVoskModel by tasks.registering {
   }
 }
 android.sourceSets.getByName("main").assets.srcDir(voskAssetsDir.get().asFile)
-tasks.configureEach { if (name.startsWith("merge") && name.endsWith("Assets")) dependsOn(fetchVoskModel) }
+// Anything that reads the assets folder (merging, lint) must wait for the model.
+tasks.configureEach {
+  if (name != "fetchVoskModel" && ((name.startsWith("merge") && name.endsWith("Assets")) || name.contains("lint", ignoreCase = true))) dependsOn(fetchVoskModel)
+}

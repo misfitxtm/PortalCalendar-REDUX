@@ -49,6 +49,31 @@ class RulesTest {
         assertEquals(2, Rules.pottyStreak(m, d("2026-10-07")))
     }
 
+    @Test fun recapShowsFridayAndSaturdayOnlyUntilDismissed() {
+        assertEquals(true, Rules.recapDue(d("2026-10-16"), null))   // Friday: new week
+        assertEquals(true, Rules.recapDue(d("2026-10-17"), null))   // Saturday
+        assertEquals(false, Rules.recapDue(d("2026-10-18"), null))  // Sunday: too late
+        assertEquals(false, Rules.recapDue(d("2026-10-14"), null))  // Wednesday
+        assertEquals(false, Rules.recapDue(d("2026-10-16"), "2026-10-16")) // dismissed this week
+        assertEquals(true, Rules.recapDue(d("2026-10-23"), "2026-10-16"))  // last week's dismissal doesn't carry over
+    }
+
+    @Test fun milestonesAreCelebratedOnceWhenCrossed() {
+        assertEquals(3, Rules.pottyMilestoneReached(2, 3))
+        assertEquals(7, Rules.pottyMilestoneReached(6, 7))
+        assertEquals(21, Rules.pottyMilestoneReached(20, 21))
+        assertEquals(7, Rules.pottyMilestoneReached(2, 8)) // backfilling several days: the biggest one crossed
+        assertEquals(null, Rules.pottyMilestoneReached(3, 3)) // already there
+        assertEquals(null, Rules.pottyMilestoneReached(10, 0)) // a wet day
+        assertEquals(null, Rules.pottyMilestoneReached(0, 0))
+    }
+
+    @Test fun nextMilestoneAdvancesAndEnds() {
+        assertEquals(3, Rules.nextPottyMilestone(0))
+        assertEquals(14, Rules.nextPottyMilestone(7))
+        assertEquals(null, Rules.nextPottyMilestone(21))
+    }
+
     private fun tabs(vararg on: Int) = List(7) { it in on }
 
     @Test fun allTabsOffFallsBackToCalendar() {

@@ -120,6 +120,7 @@
     <input type="text" id="ptReason" placeholder="Reason, e.g. Great job / Got in trouble" maxlength="60" autocomplete="off" style="margin:8px 0 0;">
     <div id="starBox" style="margin-top:8px;"></div>
     <div id="ptHistory"></div>
+    <div id="lastWeek" style="margin-top:12px;"></div>
   </div>
 
   <div class="card" data-tab="chores">
@@ -405,8 +406,12 @@
     </label>
     <div id="syncSpokeBox" style="display:none;margin:12px 0 0 30px;">
       <div id="syncDiscovered" style="font-size:13px;color:#737983;margin-bottom:6px;"></div>
-      <label style="font-size:13px;color:#737983;">Hub address (leave blank to auto-find)</label>
+      <label style="font-size:13px;color:#737983;">Hub address</label>
       <input type="text" id="syncHub" placeholder="192.168.1.42" onchange="saveSync()" style="width:100%;">
+      <label style="font-size:13px;color:#737983;">Pairing code (copy it from the hub's Family tab)</label>
+      <input type="password" id="syncCode" placeholder="Paste the hub's pairing code" autocomplete="off" onchange="saveSync()" style="width:100%;">
+      <div id="syncPaired" style="font-size:12px;color:#8b949e;margin-top:2px;"></div>
+      <div style="font-size:12px;color:#8b949e;margin-top:4px;">Hubs now require a pairing code. Once paired, this Portal only talks to the address above and never to one it merely finds on the network.</div>
       <label style="display:flex;align-items:center;gap:10px;font-size:14px;margin-top:12px;">
         <input type="checkbox" id="syncMirror" onchange="saveSync()" style="width:20px;height:20px;flex:none;">
         Also mirror the hub's calendars &amp; settings
@@ -918,13 +923,17 @@ function applySync(st){
   const hubBox = document.getElementById('syncHubBox');
   if (st.role === 'hub') {
     hubBox.style.display = 'block';
-    hubBox.textContent = 'Other Portals find this hub automatically. Its address is ' + st.myAddress + '.';
+    hubBox.innerHTML = 'This hub\'s address is <strong>' + esc(st.myAddress) + '</strong>. On each following Portal enter that address and this pairing code:'
+      + '<div style="display:flex;gap:6px;margin-top:6px;"><input type="password" id="pairCode" value="' + esc(st.pairingCode) + '" readonly style="flex:1;margin:0;font-family:monospace;">'
+      + '<button class="ghost" style="flex:none;" onclick="const c=document.getElementById(\'pairCode\');c.type=c.type===\'password\'?\'text\':\'password\'">Show</button></div>'
+      + '<div style="margin-top:4px;">Anyone with this code can read and change everything on this Portal. Keep it private.</div>';
   } else { hubBox.style.display = 'none'; }
   if (st.role === 'spoke') {
     const d = document.getElementById('syncDiscovered');
-    if (st.hubUrl) d.textContent = '✓ Following ' + st.hubUrl;
-    else if (st.discovered && st.discovered.length) d.textContent = 'Found on the network: ' + st.discovered.join(', ');
-    else d.textContent = 'Searching for a hub on the network…';
+    document.getElementById('syncPaired').textContent = st.paired ? '✓ Paired. Paste a new code to replace it.' : 'Not paired yet.';
+    if (st.hubUrl && st.paired) d.textContent = '✓ Following ' + st.hubUrl;
+    else if (!st.paired) d.textContent = 'Enter the hub\'s address and pairing code to start following it.';
+    else d.textContent = 'Enter the hub\'s address.';
   }
 }
 
@@ -938,11 +947,14 @@ async function saveSync(){
   const body = { manualHub: document.getElementById('syncHub').value,
                  mirrorAll: document.getElementById('syncMirror').checked };
   if (role) body.role = role.value;
+  const code = document.getElementById('syncCode').value.trim();
+  if (code) body.hubToken = code;
   try {
     const r = await fetch('/api/familysync', {method:'POST', body: JSON.stringify(body)});
     const st = await r.json();
     if (!r.ok) throw new Error(st.error || 'failed');
     applySync(st);
+    document.getElementById('syncCode').value = ''; // never leave the code sitting in the field
     msg('Sync settings saved', true);
   } catch(e){ msg(e.message, false); loadSync(); }
 }
@@ -1292,6 +1304,12 @@ function renderChores(){
         </div>
         <button class="del" onclick="choreAct({action:'undoAdjust',id:'${esc(a.id)}'})" aria-label="Undo">✕</button>
       </div>`).join('') : '';
+
+  const lw = (st.lastWeek && st.lastWeek.results || []).filter(r => r.earned > 0);
+  document.getElementById('lastWeek').innerHTML = lw.length
+    ? '<div style="font-size:13px;color:#737983;margin-bottom:4px;">🏆 Last week (' + esc(st.lastWeek.start) + ')</div>'
+      + lw.map((r, i) => `<div style="display:flex;gap:8px;padding:3px 0;"><span>${['🥇','🥈','🥉'][i] || '•'}</span><span style="flex:1;">${esc(r.name)}</span><span>${r.earned} pts${r.hitGoal ? ' ✓' : ''}</span></div>`).join('')
+    : '';
 
   document.getElementById('rewardBox').innerHTML = (st.rewards || []).map(r => `
     <div class="cal-row"><span style="font-size:20px;">${esc(r.icon)}</span>

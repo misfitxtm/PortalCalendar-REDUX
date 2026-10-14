@@ -14,14 +14,19 @@ screenshots. This fork keeps their MIT license and copyright in [LICENSE](LICENS
 - Blocks DNS-rebinding, cross-site and feed-redirect (SSRF) attacks, and escapes the OAuth page.
 - iCloud, Google and Gemini secrets are encrypted with the Android Keystore. Backups are
   passphrase-encrypted.
+- Calendar feeds are parsed in Rust with hard limits on size, events and recurrence work. A
+  mutation fuzzer found and fixed a crash and a slow-rule problem in the parsing code.
+- Several Portals can sync with a hub using a pairing code, and a paired Portal never sends the code
+  to an address it merely discovered on the network.
 - Details and open items: [docs/SECURITY-AUDIT.md](docs/SECURITY-AUDIT.md).
 
 **Features**
 - **Chore points:** add or remove points (bonus or penalty, with a reason and undo), points per
   chore, a starter chore list, and a weekly reset every Friday.
 - **Rewards:** a prize list kids can spend this week's points on.
-- **Potty tracker (optional):** a dry-night streak toward 3 weeks with a month calendar. You choose
-  which kids use it.
+- **Friday recap:** the first days of a new points week show last week's points per kid.
+- **Potty tracker (optional):** a dry-night streak toward 3 weeks with milestones at 3, 7, 14 and 21
+  days, and a month calendar. You choose which kids use it.
 - **Shopping list (optional):** quick-add household items or type your own. Locked behind the parent
   PIN on the board.
 - **Choose your tabs and your home screen:** switch any tab off and pick the one the board opens on.
@@ -30,8 +35,9 @@ screenshots. This fork keeps their MIT license and copyright in [LICENSE](LICENS
 - **Proton Calendar (read-only):** paste a Proton "share with anyone" link like any other calendar.
 
 **Known limitations**
-- Syncing several Portals together (hub and spoke) doesn't work yet: followers can't sign in to the hub.
-- Release APKs are debug-signed for now, so only update from builds made with the same key.
+- Syncing several Portals (hub and spoke) is only tested against a stand-in hub, not two real Portals.
+- Traffic on your Wi-Fi is plain HTTP, so someone who can sniff it could see the sign-in cookie.
+- Calendar recurrence rules that repeat more often than hourly are ignored on purpose.
 
 ## Requirements
 
@@ -44,26 +50,31 @@ screenshots. This fork keeps their MIT license and copyright in [LICENSE](LICENS
 
 The APK is about 60 MB because the voice model is bundled.
 
-1. Download `portalhub-redux-<version>.apk` from the
-   [Releases](https://github.com/misfitxtm/PortalCalendar-REDUX/releases) page.
+1. Download `portalhub-redux-<version>.apk` (and its `.sha256` file) from the
+   [Releases](https://github.com/misfitxtm/PortalCalendar-REDUX/releases) page. Check it:
+   `sha256sum -c portalhub-redux-<version>.apk.sha256`. Release APKs are signed with a certificate whose
+   SHA-256 fingerprint is
+   `9B:3A:B0:DC:CF:98:5F:E3:C9:4D:D7:B9:DE:00:81:B1:0D:6F:DF:19:94:D0:1E:2B:C7:BD:CA:69:05:C4:5B:3B`
+   (`apksigner verify --print-certs <apk>` shows it).
 2. Connect the Portal over USB (or `adb connect <portal-ip>:5555`) and run:
 
 ```sh
 adb install -r portalhub-redux-<version>.apk
-adb shell am start -n com.portal.calendar/.MainActivity
+adb shell am start -n com.portalhub.redux/com.portal.calendar.MainActivity
 # Optional: lets the app take the screen back from the stock photo frame
-adb shell appops set com.portal.calendar GET_USAGE_STATS allow
+adb shell appops set com.portalhub.redux GET_USAGE_STATS allow
 ```
 
 3. Scan the QR code on the Portal with your phone. That opens the setup page and signs it in.
 
-**Already running the original PortalHub?** This fork uses the same app id, so Android only lets one
-of them be installed, and an install over the top fails with a signature error if the keys differ.
-Export a backup from the old app first (its Settings → Backup), then `adb uninstall com.portal.calendar`
-and install this one. The old unencrypted backup code can be imported here.
+**Already running the original PortalHub?** This fork has its own app id (`com.portalhub.redux`), so
+both can be installed, but they both use port 8090, so stop or remove the original first. Your data
+doesn't carry over automatically: in the old app use Settings → Backup, then `adb uninstall
+com.portal.calendar`, install this one, and paste the backup into Settings → Backup here. Old plain
+backup codes still import.
 
-**Upgrading this fork:** run the same `adb install -r` with a newer APK, as long as it was signed with
-the same key.
+**Upgrading this fork:** run the same `adb install -r` with a newer release. It only works if the
+signing key matches, which is why the key matters (see [docs/RELEASING.md](docs/RELEASING.md)).
 
 Wireless adb: with USB connected once, `adb tcpip 5555`, unplug, then `adb connect <portal-ip>:5555`.
 It resets after a Portal reboot.
@@ -82,7 +93,9 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties
 ./gradlew :app:testDebugUnitTest    # Kotlin tests
 ```
 
-The APK is written to `app/build/outputs/apk/debug/`. Only `arm64-v8a` is built.
+The APK is written to `app/build/outputs/apk/debug/`. Only `arm64-v8a` is built. A debug APK is
+debuggable and signed with your local debug key, so it is for your own Portal only. To make a
+release APK, see [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Voice commands
 
