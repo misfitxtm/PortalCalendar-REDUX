@@ -69,7 +69,7 @@ class BoardController(private val baseCtx: Context) {
     private var lastDayStamp = ""
     private var statusLine = "Starting…"
 
-    // Top-level tabs: 0=Calendar 1=Chores 2=Lists 3=Meals 4=Routines
+    // Top-level tabs: 0=Calendar 1=Chores 2=Lists 3=Meals 4=Routines 5=Potty 6=Shopping
     private var currentTab = 0
     private lateinit var tabButtons: List<TextView>
     private lateinit var tabPanels: List<View>
@@ -77,6 +77,9 @@ class BoardController(private val baseCtx: Context) {
     private lateinit var choresTab: ChoresTab
     private lateinit var mealsTab: MealsTab
     private lateinit var routinesTab: RoutinesTab
+    private lateinit var pottyTab: PottyTab
+    private lateinit var shoppingTab: ShoppingTab
+    private var startTabChosen = false
 
     private lateinit var clockText: TextView
     private lateinit var dateText: TextView
@@ -140,6 +143,8 @@ class BoardController(private val baseCtx: Context) {
     private lateinit var voiceState: TextView
     private lateinit var voiceSub: TextView
     private lateinit var voiceBtn: TextView
+    private lateinit var voiceCancel: TextView
+    private var voicePending: (() -> Unit)? = null // set while the offline path waits for "Add"
     private val voice = VoiceInput()
     private val voiceExec = java.util.concurrent.Executors.newSingleThreadExecutor()
     @Volatile private var voiceBusy = false
@@ -229,6 +234,8 @@ class BoardController(private val baseCtx: Context) {
             2 -> listsTab.render()
             3 -> mealsTab.render()
             4 -> routinesTab.render()
+            5 -> pottyTab.render()
+            6 -> shoppingTab.render()
         }
         refreshFocusables()
     }
@@ -251,20 +258,24 @@ class BoardController(private val baseCtx: Context) {
 
     /** Hides the tab pills for features switched off on the page. */
     private fun applyFeatures() {
-        val flags = listOf(true,
-            store.featureEnabled("chores"),
-            store.featureEnabled("lists"),
-            store.featureEnabled("meals"),
-            store.featureEnabled("routines", default = false))
+        val flags = Rules.effectiveTabs(store.tabFlags())
         tabButtons.forEachIndexed { i, b ->
             b.visibility = if (flags[i]) View.VISIBLE else View.GONE
         }
+        // One tab left needs no tab strip.
         (tabButtons[0].parent as View).visibility =
-            if (flags.drop(1).any { it }) View.VISIBLE else View.GONE
-        if (!flags[currentTab]) setTab(0)
+            if (flags.count { it } > 1) View.VISIBLE else View.GONE
+        if (!flags[currentTab]) setTab(startTab(flags))
         if (::micFab.isInitialized)
-            micFab.visibility = if (Gemini.isReady(ctx)) View.VISIBLE else View.GONE
+            micFab.visibility = if (voiceAvailable()) View.VISIBLE else View.GONE
     }
+
+    /** Voice is invisible and inert unless a parent switched it on (Settings → Voice commands). */
+    private fun voiceAvailable() =
+        store.voiceEnabled() && (store.voiceEngine() != "gemini" || Gemini.isReady(ctx))
+
+    private fun startTab(flags: List<Boolean> = Rules.effectiveTabs(store.tabFlags())) =
+        Rules.startTab(flags, Rules.TAB_KEYS.indexOf(store.defaultTab()))
 
     fun start() {
         App.instance.activeBoard = this
@@ -272,6 +283,7 @@ class BoardController(private val baseCtx: Context) {
         App.instance.addDataListener(dataListener)
         events = App.instance.lastEvents // paint instantly; sync refreshes shortly
         applyFeatures()
+        if (!startTabChosen) { startTabChosen = true; setTab(startTab()) }
         exitButton.visibility = if (onExit != null) View.VISIBLE else View.GONE
         renderAll()
         handler.post(clockTick)
@@ -332,7 +344,9 @@ class BoardController(private val baseCtx: Context) {
     // ----------------------------------------------------------- voice input
 
     private fun startVoice() {
-        if (!Gemini.isReady(ctx)) {
+        if (!store.voiceEnabled()) return // switched off: never record
+        val useGemini = store.voiceEngine() == "gemini"
+        if (useGemini && !Gemini.isReady(ctx)) {
             showVoice("Voice needs AI", "Turn on AI and add a Gemini key in Settings first.", "Close")
             return
         }
@@ -345,18 +359,64 @@ class BoardController(private val baseCtx: Context) {
             return
         }
         voiceBusy = true
-        showVoice("Listening…", "Say it, then pause — e.g. \"add dentist Tuesday at 3\".", "Stop")
+        showVoice("Listening…",
+            if (useGemini) "Say it, then pause — e.g. \"add dentist Tuesday at 3\"."
+            else "Say it, then pause — e.g. \"add paper towels to the shopping list\".", "Stop")
         voiceExec.execute {
+            // Offline: warm the speech model up while the user is still talking.
+            val loader = if (useGemini) null else Thread { runCatching { VoskTranscriber.load(ctx) } }.also { it.start() }
             val wav = runCatching { voice.record() }.getOrNull()
-            if (wav == null) { post { finishVoice("Didn't catch that", "Tap 🎤 to try again.") }; return@execute }
+            if (wav == null) {
+                loader?.join()
+                if (!useGemini) VoskTranscriber.close()
+                post { finishVoice("Didn't catch that", "Tap 🎤 to try again.") }
+                return@execute
+            }
             post { if (voiceBusy) { voiceState.text = "Thinking…"; voiceSub.text = ""; voiceBtn.visibility = View.GONE } }
+            if (loader != null) offlineVoice(wav, loader) else geminiVoice(wav)
+        }
+    }
+
+    /** On-device recognition, then a strict phrase match; the user confirms before anything changes. */
+    private fun offlineVoice(wav: ByteArray, loader: Thread) {
+        try {
+            loader.join()
+            val text = VoskTranscriber.transcribe(wav, VoiceActions.grammar(ctx))
+            if (text.isEmpty()) { post { finishVoice("Didn't catch that", "Tap 🎤 to try again.") }; return }
+            val cmd = VoiceCommands.interpret(text)
+            if (cmd == null) { post { finishVoice("“$text”", "I only understand a few phrases. ${VoiceCommands.HELP}") }; return }
+            post {
+                voiceBusy = false
+                voiceState.text = "“$text”"
+                voiceSub.text = VoiceCommands.describe(cmd)
+                voiceBtn.text = "Add"
+                voiceBtn.visibility = View.VISIBLE
+                voiceCancel.visibility = View.VISIBLE
+                voicePending = {
+                    voiceExec.execute {
+                        val reply = runCatching { VoiceActions.apply(ctx, cmd) }.getOrElse { it.message ?: "That didn't work." }
+                        post { App.instance.notifyDataChanged(); finishVoice("Done", reply) }
+                    }
+                }
+                // Don't leave the card up forever if nobody answers.
+                val token = ++voiceSession
+                handler.postDelayed({ if (voicePending != null && voiceSession == token) hideVoice() }, 30_000)
+            }
+        } catch (e: Exception) {
+            post { finishVoice("Sorry — that didn't work", e.message ?: "Try again.") }
+        } finally {
+            VoskTranscriber.close()
+        }
+    }
+
+    private fun geminiVoice(wav: ByteArray) {
             try {
                 val b64 = android.util.Base64.encodeToString(wav, android.util.Base64.NO_WRAP)
                 val res = Gemini.voiceCommand(ctx, b64)
                 val transcript = res.optString("transcript").trim()
                 if (transcript.isEmpty()) {
                     post { finishVoice("Didn't catch that", "Tap 🎤 to try again.") }
-                    return@execute
+                    return
                 }
                 val applyRes = org.json.JSONObject(Gemini.applyProposals(ctx, res))
                 val applied = applyRes.optInt("applied")
@@ -380,7 +440,6 @@ class BoardController(private val baseCtx: Context) {
             } catch (e: Exception) {
                 post { finishVoice("Sorry — that didn't work", e.message ?: "Try again.") }
             }
-        }
     }
 
     /** Run on the UI thread only if this board is still alive (post-rebuild safe). */
@@ -388,6 +447,7 @@ class BoardController(private val baseCtx: Context) {
 
     /** The overlay's button: Stop ends recording early; otherwise it dismisses. */
     private fun onVoiceButton() {
+        voicePending?.let { voicePending = null; voiceCancel.visibility = View.GONE; it(); return }
         if (voice.running) voice.stop() else hideVoice()
     }
 
@@ -401,6 +461,7 @@ class BoardController(private val baseCtx: Context) {
 
     private fun finishVoice(state: String, sub: String) {
         voiceBusy = false
+        voiceCancel.visibility = View.GONE
         voiceState.text = state
         voiceSub.text = sub
         voiceBtn.text = "Done"
@@ -414,6 +475,8 @@ class BoardController(private val baseCtx: Context) {
 
     private fun hideVoice() {
         voiceOverlay.visibility = View.GONE
+        voiceCancel.visibility = View.GONE
+        voicePending = null
         voiceBusy = false
     }
 
@@ -499,7 +562,7 @@ class BoardController(private val baseCtx: Context) {
             gravity = Gravity.CENTER
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(ACCENT) }
             elevation = dp(6).toFloat()
-            visibility = if (Gemini.isReady(ctx)) View.VISIBLE else View.GONE
+            visibility = if (voiceAvailable()) View.VISIBLE else View.GONE
             setOnClickListener { requirePin { startVoice() } }
         }
         root.addView(micFab, FrameLayout.LayoutParams(dp(60), dp(60)).apply {
@@ -557,6 +620,10 @@ class BoardController(private val baseCtx: Context) {
         voiceBtn = accentButton("Stop") { onVoiceButton() }
         card.addView(voiceBtn, LinearLayout.LayoutParams(WRAP, WRAP).apply {
             topMargin = dp(20); gravity = Gravity.CENTER_HORIZONTAL
+        })
+        voiceCancel = navButton("Cancel") { voicePending = null; hideVoice() }.apply { visibility = View.GONE }
+        card.addView(voiceCancel, LinearLayout.LayoutParams(WRAP, WRAP).apply {
+            topMargin = dp(10); gravity = Gravity.CENTER_HORIZONTAL
         })
         scrim.addView(card, FrameLayout.LayoutParams(dp(420), WRAP).apply {
             gravity = Gravity.CENTER
@@ -1358,6 +1425,46 @@ class BoardController(private val baseCtx: Context) {
     private var pinAction: (() -> Unit)? = null
 
     /** Parent gate: runs [action] directly when no kid-lock PIN is set. */
+    private fun showAdjustMenu(anchor: View, memberId: String, name: String) {
+        val opts = listOf(Triple("+1  Great job", 1, "Great job"), Triple("+5  Bonus", 5, "Bonus"),
+            Triple("−1  Got in trouble", -1, "Got in trouble"), Triple("−5  Big trouble", -5, "Big trouble"))
+        val menu = android.widget.PopupMenu(ctx, anchor)
+        opts.forEachIndexed { i, o -> menu.menu.add(0, i, i, o.first) }
+        menu.menu.add(0, SPEND_ITEM, SPEND_ITEM, "🎁 Spend points…")
+        menu.setOnMenuItemClickListener { item ->
+            if (item.itemId == SPEND_ITEM) { showRewardMenu(anchor, memberId); return@setOnMenuItemClickListener true }
+            val (_, delta, reason) = opts[item.itemId]
+            runCatching {
+                Chores.mutate(ctx, org.json.JSONObject().put("action", "adjust")
+                    .put("memberId", memberId).put("delta", delta).put("reason", reason))
+            }
+            true
+        }
+        menu.show()
+    }
+
+    private fun showRewardMenu(anchor: View, memberId: String) {
+        val st = org.json.JSONObject(Chores.statusJson(ctx))
+        val left = st.getJSONObject("spendable").optInt(memberId)
+        val rewards = st.getJSONArray("rewards")
+        val menu = android.widget.PopupMenu(ctx, anchor)
+        menu.menu.add(0, -1, 0, "⭐ $left to spend this week").isEnabled = false
+        if (rewards.length() == 0) menu.menu.add(0, -2, 1, "No rewards yet — add some on your phone").isEnabled = false
+        for (i in 0 until rewards.length()) {
+            val r = rewards.getJSONObject(i)
+            menu.menu.add(0, i, i + 1, "${r.optString("icon")} ${r.optString("name")} — ${r.optInt("cost")}")
+                .isEnabled = left >= r.optInt("cost")
+        }
+        menu.setOnMenuItemClickListener { item ->
+            if (item.itemId >= 0) runCatching {
+                Chores.mutate(ctx, org.json.JSONObject().put("action", "redeem")
+                    .put("memberId", memberId).put("rewardId", rewards.getJSONObject(item.itemId).optString("id")))
+            }.onFailure { android.widget.Toast.makeText(ctx, it.message ?: "couldn't redeem", android.widget.Toast.LENGTH_SHORT).show() }
+            true
+        }
+        menu.show()
+    }
+
     private fun requirePin(action: () -> Unit) =
         askPin(store.pin(), "Parents only 🔒", action)
 
@@ -1454,7 +1561,7 @@ class BoardController(private val baseCtx: Context) {
         pinDots.text = "●".repeat(pinEntry.length) + "○".repeat(4 - pinEntry.length)
     }
 
-    /** Back to the calendar tab, week view, current week (idle takeover lands here). */
+    /** Back to the default tab, week view, current week (idle takeover lands here). Also re-locks Shopping. */
     fun resetView() {
         weekOffset = 0
         monthOffset = 0
@@ -1462,7 +1569,7 @@ class BoardController(private val baseCtx: Context) {
         scheduleOffset = 0
         mealsTab.reset() // its private week offset must come home too
         closeOverlays()
-        if (currentTab != 0) setTab(0)
+        startTab().let { if (currentTab != it) setTab(it) }
         setView(store.defaultView())
     }
 
@@ -1558,7 +1665,7 @@ class BoardController(private val baseCtx: Context) {
             setPadding(dp(22), dp(12), dp(22), 0)
         }
         val tabs = ArrayList<TextView>()
-        listOf("Calendar", "Chores", "Lists", "Meals", "Routines").forEachIndexed { i, label ->
+        listOf("Calendar", "Chores", "Lists", "Meals", "Routines", "Potty", "Shopping").forEachIndexed { i, label ->
             val t = TextView(ctx).apply {
                 text = label
                 textSize = 15f
@@ -1566,7 +1673,8 @@ class BoardController(private val baseCtx: Context) {
                 typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                 minimumHeight = dp(48) // comfortable tap target at arm's length
                 setPadding(dp(18), dp(8), dp(18), dp(8))
-                setOnClickListener { setTab(i) }
+                // Shopping is parent-locked: ask for the PIN each time it is opened.
+                setOnClickListener { if (i == Rules.SHOPPING_TAB) requirePin { setTab(i) } else setTab(i) }
             }
             tabRow.addView(t, LinearLayout.LayoutParams(WRAP, WRAP).apply {
                 rightMargin = dp(8)
@@ -1603,7 +1711,8 @@ class BoardController(private val baseCtx: Context) {
                     }
                 }
             },
-            onCelebrate = { anchor, goalReached -> celebrateAt(anchor, goalReached) })
+            onCelebrate = { anchor, goalReached -> celebrateAt(anchor, goalReached) },
+            onAdjust = { anchor, memberId, name -> requirePin { showAdjustMenu(anchor, memberId, name) } })
         area.addView(choresTab.view, FrameLayout.LayoutParams(MATCH, MATCH))
         mealsTab = MealsTab(ctx, { title, body ->
             detailTitle.text = title
@@ -1627,7 +1736,11 @@ class BoardController(private val baseCtx: Context) {
                 }
             })
         area.addView(routinesTab.view, FrameLayout.LayoutParams(MATCH, MATCH))
-        tabPanels = listOf(weekPanel, choresTab.view, listsTab.view, mealsTab.view, routinesTab.view)
+        pottyTab = PottyTab(ctx) { action -> requirePin(action) }
+        area.addView(pottyTab.view, FrameLayout.LayoutParams(MATCH, MATCH))
+        shoppingTab = ShoppingTab(ctx)
+        area.addView(shoppingTab.view, FrameLayout.LayoutParams(MATCH, MATCH))
+        tabPanels = listOf(weekPanel, choresTab.view, listsTab.view, mealsTab.view, routinesTab.view, pottyTab.view, shoppingTab.view)
 
         // Nav row -------------------------------------------------------
         // Portrait is too narrow to fit the title + all controls on one line
@@ -1833,6 +1946,8 @@ class BoardController(private val baseCtx: Context) {
             2 -> listsTab.render()
             3 -> mealsTab.render()
             4 -> routinesTab.render()
+            5 -> pottyTab.render()
+            6 -> shoppingTab.render()
         }
         refreshFocusables()
     }
@@ -2795,6 +2910,8 @@ class BoardController(private val baseCtx: Context) {
                     2 -> listsTab.render()
                     3 -> mealsTab.render()
                     4 -> routinesTab.render()
+                    5 -> pottyTab.render()
+                    6 -> shoppingTab.render()
                 }
             }
         }
@@ -3109,7 +3226,7 @@ class BoardController(private val baseCtx: Context) {
     }
 
     private fun setupUrl(): String =
-        "http://" + (wifiIp() ?: "<portal-ip>") + ":" + ConfigServer.PORT
+        "http://" + (wifiIp() ?: "<portal-ip>") + ":" + ConfigServer.PORT + "/?t=" + store.serverToken()
 
     private fun wifiIp(): String? {
         val wm = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
@@ -3128,6 +3245,7 @@ class BoardController(private val baseCtx: Context) {
     }
 
     companion object {
+        private const val SPEND_ITEM = 100
         private const val MATCH = LinearLayout.LayoutParams.MATCH_PARENT
         private const val WRAP = LinearLayout.LayoutParams.WRAP_CONTENT
         private const val SYNC_INTERVAL_MS = 15L * 60 * 1000

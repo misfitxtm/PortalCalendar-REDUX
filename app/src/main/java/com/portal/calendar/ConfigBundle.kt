@@ -11,23 +11,33 @@ import java.io.File
  * settings, features, layout, AND credentials: Gemini key, iCloud password,
  * Google refresh token) plus every family-data JSON file.
  *
- * The code therefore contains secrets — the page warns the user to treat it
- * like a password. Volatile bits (the short-lived Google access token, the
+ * The code therefore contains secrets. User backups are passphrase-encrypted
+ * ([BackupCrypto], "PORTALHUB2:"); only the hub-to-spoke mirror still uses the
+ * plain "PORTALHUB1:" form, and old plain backups can still be imported. Volatile bits (the short-lived Google access token, the
  * weather + feed caches) are skipped; they regenerate on the new device.
  */
 object ConfigBundle {
     private const val MAGIC = "PORTALHUB1:"
+    private const val MAGIC2 = "PORTALHUB2:"
     private const val PREFS = "config"
 
     // Prefs that are caches/short-lived — re-derived on the target device.
-    private val SKIP_PREFS = setOf("g_access", "g_token_exp")
+    private val SKIP_PREFS = setOf("g_access", "g_token_exp", "server_token")
 
     private val DATA_FILES = listOf(
         "members.json", "lists.json", "chores.json", "chore_done.json",
         "star_goals.json", "chore_history.json", "mealplan.json",
-        "recipes.json", "magic_done.json", "routines.json", "routine_done.json")
+        "recipes.json", "magic_done.json", "routines.json", "routine_done.json", "chore_points.json", "potty_log.json", "shopping.json", "chore_rewards.json")
 
-    fun export(ctx: Context): String {
+    /** Passphrase-encrypted backup for the user to keep or clone with. */
+    fun export(ctx: Context, passphrase: String): String =
+        MAGIC2 + BackupCrypto.encrypt(bundleJson(ctx).toByteArray(Charsets.UTF_8), passphrase)
+
+    /** Unencrypted form, only for the hub-to-spoke mirror, which is behind the pairing token. */
+    fun exportPlain(ctx: Context): String = MAGIC + Base64.encodeToString(
+        bundleJson(ctx).toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+
+    private fun bundleJson(ctx: Context): String {
         val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val pj = JSONObject()
         for ((k, v) in prefs.all) {
@@ -40,29 +50,33 @@ object ConfigBundle {
                 is Float -> "f" to v.toDouble()
                 else -> "s" to v.toString()
             }
-            pj.put(k, JSONObject().put("t", t).put("v", value))
+            // Secrets are stored sealed with this device's Keystore key; the bundle carries them readable.
+            val shown = if (k in Secrets.KEYS) Secrets.open(value.toString()) ?: continue else value
+            pj.put(k, JSONObject().put("t", t).put("v", shown))
         }
         val fj = JSONObject()
         for (name in DATA_FILES) {
             val f = File(ctx.filesDir, name)
             if (f.exists()) fj.put(name, f.readText())
         }
-        val root = JSONObject().put("v", 1).put("prefs", pj).put("files", fj)
-        return MAGIC + Base64.encodeToString(
-            root.toString().toByteArray(Charsets.UTF_8),
-            Base64.NO_WRAP)
+        return JSONObject().put("v", 1).put("prefs", pj).put("files", fj).toString()
     }
 
-    /** Replaces this device's config with the bundle. Throws on a bad code. */
-    fun import(ctx: Context, code: String) {
+    /** Replaces this device's config with the bundle. Throws on a bad code or wrong passphrase. */
+    fun import(ctx: Context, code: String, passphrase: String? = null) {
         val trimmed = code.trim()
-        val payload = trimmed.removePrefix(MAGIC)
-        if (payload == trimmed) // no prefix found
-            throw IllegalArgumentException("that doesn't look like a PortalHub backup code")
-        val json = try {
-            String(Base64.decode(payload, Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (e: Exception) {
-            throw IllegalArgumentException("the backup code is corrupted or incomplete")
+        val json = when {
+            trimmed.startsWith(MAGIC2) -> {
+                if (passphrase.isNullOrEmpty())
+                    throw IllegalArgumentException("enter the passphrase this backup was made with")
+                String(BackupCrypto.decrypt(trimmed.removePrefix(MAGIC2), passphrase), Charsets.UTF_8)
+            }
+            trimmed.startsWith(MAGIC) -> try {
+                String(Base64.decode(trimmed.removePrefix(MAGIC), Base64.NO_WRAP), Charsets.UTF_8)
+            } catch (e: Exception) {
+                throw IllegalArgumentException("the backup code is corrupted or incomplete")
+            }
+            else -> throw IllegalArgumentException("that doesn't look like a PortalHub backup code")
         }
         val root = JSONObject(json)
         val prefsIn = root.optJSONObject("prefs")
@@ -101,13 +115,17 @@ object ConfigBundle {
         }
 
         // Apply (validated): replace config prefs wholesale, then data files.
-        val editor = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear()
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        // The pairing token is this device's identity: wiping it would desync the running server.
+        val pairingToken = prefs.getString("server_token", null)
+        val editor = prefs.edit().clear()
+        pairingToken?.let { editor.putString("server_token", it) }
         for ((k, t, v) in parsedPrefs) when (t) {
             "b" -> editor.putBoolean(k, v as Boolean)
             "i" -> editor.putInt(k, v as Int)
             "l" -> editor.putLong(k, v as Long)
             "f" -> editor.putFloat(k, (v as Double).toFloat())
-            else -> editor.putString(k, v as String)
+            else -> editor.putString(k, if (k in Secrets.KEYS && v is String && v.isNotEmpty()) Secrets.seal(v) else v as String)
         }
         editor.commit()
         for ((name, text) in parsedFiles) Data.writeRaw(ctx, name, text)

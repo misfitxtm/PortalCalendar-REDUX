@@ -28,7 +28,6 @@ import java.util.concurrent.CopyOnWriteArraySet
 class App : Application() {
     lateinit var store: ConfigStore
     lateinit var sync: SyncManager
-    private var server: ConfigServer? = null
     private val main = Handler(Looper.getMainLooper())
     private val configListeners = CopyOnWriteArraySet<() -> Unit>()
 
@@ -46,10 +45,13 @@ class App : Application() {
         super.onCreate()
         instance = this
         store = ConfigStore(this)
+        // Never let a Keystore problem stop the app from starting; secrets just stay as they were.
+        runCatching { Secrets.migrate(this) }
         sync = SyncManager(this, store)
-        server = ConfigServer(this, store) { notifyConfigChanged() }
         try {
-            server?.start(fi.iki.elonen.NanoHTTPD.SOCKET_READ_TIMEOUT, true)
+            // Handle ignored: the server lives as long as the process.
+            PortalCore.start("0.0.0.0:${ConfigServer.PORT}", store.serverToken(),
+                ConfigServer(this, store) { notifyConfigChanged() })
         } catch (_: Exception) {
             // Port busy (stale process) — the page just won't load until relaunch.
         }

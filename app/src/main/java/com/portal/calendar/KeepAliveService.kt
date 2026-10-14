@@ -51,7 +51,7 @@ class KeepAliveService : Service() {
             CHANNEL, "Idle screen takeover", NotificationManager.IMPORTANCE_MIN))
         startForeground(1, Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher)
-            .setContentTitle("Family Calendar idle screen is on")
+            .setContentTitle("PortalHub REDUX idle screen is on")
             .build())
         handler.postDelayed(guard, 30_000)
     }
