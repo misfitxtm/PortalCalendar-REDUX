@@ -1,39 +1,38 @@
 package com.portal.calendar
 
 import android.content.Context
-import fi.iki.elonen.NanoHTTPD
 
 /**
- * Tiny HTTP server so calendars are configured from a phone instead of by
- * typing on the Portal. GET / serves the setup page; the page talks JSON to
- * /api/config and /api/sync.
+ * Phone-facing config API. The Rust core (core/) owns the socket and the auth gate;
+ * only requests that passed it reach [handle].
  */
 class ConfigServer(
     private val ctx: Context,
     private val store: ConfigStore,
     private val onConfigChanged: () -> Unit
-) : NanoHTTPD(PORT) {
+) : NativeHandler {
 
-    private class BodyTooLarge : Exception("request body too large")
-
-    override fun serve(session: IHTTPSession): Response = try {
-        route(session)
-    } catch (e: BodyTooLarge) {
-        // The unread body is still on the socket — don't let keep-alive reuse it.
-        newFixedLengthResponse(Response.Status.PAYLOAD_TOO_LARGE, "application/json",
-            "{\"error\":\"request too large\"}").apply { addHeader("connection", "close") }
-    } catch (e: IllegalArgumentException) {
-        newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json",
-            "{\"error\":${jsonStr(e.message ?: "invalid input")}}")
-    } catch (e: Exception) {
-        newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "application/json",
-            "{\"error\":${jsonStr(e.message ?: e.javaClass.simpleName)}}")
+    private class Req(val method: String, val uri: String, val query: String, val body: ByteArray) {
+        fun param(name: String): String? = query.split('&').firstNotNullOfOrNull {
+            val (k, v) = it.split('=', limit = 2).let { p -> p[0] to p.getOrElse(1) { "" } }
+            if (k == name) java.net.URLDecoder.decode(v, "UTF-8") else null
+        }
     }
 
-    private fun route(s: IHTTPSession): Response = when {
+    private object Method { const val GET = "GET"; const val POST = "POST" }
+
+    override fun handle(method: String, path: String, query: String, body: ByteArray): NativeResponse = try {
+        route(Req(method, path, query, body))
+    } catch (e: IllegalArgumentException) {
+        resp(400, "application/json", "{\"error\":${jsonStr(e.message ?: "invalid input")}}")
+    } catch (e: Exception) {
+        resp(500, "application/json", "{\"error\":${jsonStr(e.message ?: e.javaClass.simpleName)}}")
+    }
+
+    private fun route(s: Req): NativeResponse = when {
         s.uri == "/" || s.uri == "/index.html" -> {
             val html = ctx.assets.open("config.html").bufferedReader().readText()
-            newFixedLengthResponse(Response.Status.OK, "text/html", html)
+            resp(200, "text/html", html)
         }
         s.uri == "/api/config" && s.method == Method.GET ->
             json(store.feedsJson())
@@ -48,14 +47,14 @@ class ConfigServer(
             json("{\"ok\":true}")
         }
         s.uri == "/manifest.json" && s.method == Method.GET ->
-            newFixedLengthResponse(Response.Status.OK, "application/json", """
-                {"name":"Family Calendar","short_name":"Family",
+            resp(200, "application/json", """
+                {"name":"PortalHub REDUX","short_name":"REDUX",
                  "start_url":"/","display":"standalone",
                  "background_color":"#f4f1ea","theme_color":"#f0584c",
                  "icons":[{"src":"/icon.svg","sizes":"any","type":"image/svg+xml"}]}
             """.trimIndent())
         s.uri == "/icon.svg" && s.method == Method.GET ->
-            newFixedLengthResponse(Response.Status.OK, "image/svg+xml",
+            resp(200, "image/svg+xml",
                 "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">" +
                 "<rect width=\"100\" height=\"100\" rx=\"24\" fill=\"#F0584C\"/>" +
                 "<rect x=\"16\" y=\"28\" width=\"68\" height=\"56\" rx=\"10\" fill=\"white\"/>" +
@@ -84,6 +83,24 @@ class ConfigServer(
             json(Chores.statusJson(ctx))
         s.uri == "/api/chores" && s.method == Method.POST ->
             json(Chores.mutate(ctx, org.json.JSONObject(readBody(s))))
+        s.uri == "/api/voice" && s.method == Method.GET ->
+            json(voiceJson())
+        s.uri == "/api/voice" && s.method == Method.POST -> {
+            val o = org.json.JSONObject(readBody(s))
+            if (o.has("engine")) store.setVoiceEngine(o.getString("engine"))
+            if (o.has("enabled")) store.setVoiceEnabled(o.getBoolean("enabled"))
+            if (!store.voiceEnabled()) VoskTranscriber.close() // free the model the moment voice is switched off
+            App.instance.notifyDataChanged()
+            json(voiceJson())
+        }
+        s.uri == "/api/shopping" && s.method == Method.GET ->
+            json(Shopping.statusJson(ctx))
+        s.uri == "/api/shopping" && s.method == Method.POST ->
+            json(Shopping.mutate(ctx, org.json.JSONObject(readBody(s))))
+        s.uri == "/api/potty" && s.method == Method.GET ->
+            json(Potty.statusJson(ctx))
+        s.uri == "/api/potty" && s.method == Method.POST ->
+            json(Potty.mutate(ctx, org.json.JSONObject(readBody(s))))
         s.uri == "/api/routines" && s.method == Method.GET ->
             json(Routines.statusJson(ctx))
         s.uri == "/api/routines" && s.method == Method.POST ->
@@ -129,8 +146,12 @@ class ConfigServer(
             json(featuresJson())
         s.uri == "/api/features" && s.method == Method.POST -> {
             val o = org.json.JSONObject(readBody(s))
-            for (key in listOf("chores", "lists", "meals", "routines"))
-                if (o.has(key)) store.setFeature(key, o.getBoolean(key))
+            // Validate first so a bad request changes nothing.
+            val proposed = Rules.TAB_KEYS.map { if (o.has(it)) o.getBoolean(it) else store.featureEnabled(it, default = it in DEFAULT_ON) }
+            if (proposed.filterIndexed { i, on -> on && i != Rules.SHOPPING_TAB }.isEmpty())
+                throw IllegalArgumentException("keep at least one tab other than Shopping turned on")
+            if (o.has("defaultTab")) store.setDefaultTab(o.getString("defaultTab"))
+            for (key in Rules.TAB_KEYS) if (o.has(key)) store.setFeature(key, o.getBoolean(key))
             App.instance.notifyDataChanged()
             json(featuresJson())
         }
@@ -198,7 +219,7 @@ class ConfigServer(
         // Landing spot if the user swaps localhost→portal-ip on the Google
         // redirect URL: completes the connection right here.
         s.uri == "/oauth" && s.method == Method.GET -> {
-            val code = s.parameters["code"]?.firstOrNull()
+            val code = s.param("code")
             val msg = try {
                 if (code.isNullOrEmpty()) throw IllegalArgumentException("no code in the URL")
                 GoogleCal.finish(ctx, code)
@@ -207,8 +228,8 @@ class ConfigServer(
             } catch (e: Exception) {
                 "Couldn't finish the Google sign-in: ${e.message}"
             }
-            newFixedLengthResponse(Response.Status.OK, "text/html",
-                "<html><body style=\"font-family:sans-serif;background:#f4f1ea;color:#333a45;padding:40px;\"><h2>$msg</h2></body></html>")
+            resp(200, "text/html",
+                "<html><body style=\"font-family:sans-serif;background:#f4f1ea;color:#333a45;padding:40px;\"><h2>${android.text.TextUtils.htmlEncode(msg)}</h2></body></html>")
         }
         s.uri == "/api/event" && s.method == Method.POST -> {
             val o = org.json.JSONObject(readBody(s))
@@ -229,10 +250,11 @@ class ConfigServer(
             val count = App.instance.sync.validateFeed(url)
             json("{\"ok\":true,\"events\":$count}")
         }
-        s.uri == "/api/export" && s.method == Method.GET ->
-            newFixedLengthResponse(Response.Status.OK, "text/plain", ConfigBundle.export(ctx))
+        s.uri == "/api/export" && s.method == Method.POST ->
+            resp(200, "text/plain", ConfigBundle.export(ctx, org.json.JSONObject(readBody(s)).getString("passphrase")))
         s.uri == "/api/import" && s.method == Method.POST -> {
-            ConfigBundle.import(ctx, readBody(s))
+            val o = org.json.JSONObject(readBody(s))
+            ConfigBundle.import(ctx, o.getString("code"), o.optString("passphrase").ifEmpty { null })
             App.instance.notifyDataChanged() // refresh chores/lists/meals tabs
             onConfigChanged() // rebuilds the board (layout/feeds/creds all may differ)
             json("{\"ok\":true}")
@@ -286,7 +308,7 @@ class ConfigServer(
             json(FamilySync.snapshotJson(ctx))
         // Mirror-all: the hub's whole config bundle (includes feeds + credentials).
         s.uri == "/api/family/full" && s.method == Method.GET ->
-            newFixedLengthResponse(Response.Status.OK, "text/plain", ConfigBundle.export(ctx))
+            resp(200, "text/plain", ConfigBundle.exportPlain(ctx))
         s.uri == "/api/effects" && s.method == Method.GET ->
             json("{\"enabled\":${store.choreEffects()}}")
         s.uri == "/api/effects" && s.method == Method.POST -> {
@@ -301,44 +323,28 @@ class ConfigServer(
             if (o.has("yieldMinutes")) Screensaver.setYieldMinutes(ctx, o.getInt("yieldMinutes"))
             json(Screensaver.statusJson(ctx))
         }
-        else -> newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "not found")
+        else -> resp(404, "text/plain", "not found")
     }
 
-    /**
-     * Reads the raw body as UTF-8. NanoHTTPD's parseBody() decodes bodies
-     * without an explicit charset as Latin-1, which mangles emoji and any
-     * non-ASCII text (chore icons, event titles…).
-     */
-    private fun readBody(s: IHTTPSession): String {
-        val len = s.headers["content-length"]?.toIntOrNull() ?: 0
-        // A bogus/hostile Content-Length would otherwise allocate the whole
-        // claimed size on a 256MB-heap device → OOM → process death.
-        if (len > MAX_BODY) throw BodyTooLarge()
-        if (len <= 0) {
-            val files = HashMap<String, String>()
-            s.parseBody(files)
-            return files["postData"] ?: ""
-        }
-        val buf = ByteArray(len)
-        var read = 0
-        while (read < len) {
-            val n = s.inputStream.read(buf, read, len - read)
-            if (n <= 0) break
-            read += n
-        }
-        return String(buf, 0, read, Charsets.UTF_8)
-    }
+    private fun readBody(s: Req) = String(s.body, Charsets.UTF_8)
 
-    // "routines" defaults off (opt-in tab); the rest default on.
-    private fun featuresJson(): String = org.json.JSONObject()
-        .put("chores", store.featureEnabled("chores"))
-        .put("lists", store.featureEnabled("lists"))
-        .put("meals", store.featureEnabled("meals"))
-        .put("routines", store.featureEnabled("routines", default = false))
+    // Opt-in tabs (routines, potty, shopping) default off; the rest default on.
+    private fun featuresJson(): String = org.json.JSONObject().also { o ->
+        Rules.TAB_KEYS.forEach { o.put(it, store.featureEnabled(it, default = it in DEFAULT_ON)) }
+        o.put("defaultTab", store.defaultTab())
+    }.toString()
+
+    private fun voiceJson(): String = org.json.JSONObject()
+        .put("enabled", store.voiceEnabled())
+        .put("engine", store.voiceEngine())
+        .put("geminiReady", Gemini.isReady(ctx))
+        .put("examples", org.json.JSONArray(VoiceActions.EXAMPLES))
         .toString()
 
-    private fun json(body: String) =
-        newFixedLengthResponse(Response.Status.OK, "application/json", body)
+    private fun resp(status: Int, mime: String, body: String) =
+        NativeResponse(status, "$mime; charset=utf-8", body.toByteArray(Charsets.UTF_8))
+
+    private fun json(body: String) = resp(200, "application/json", body)
 
     // org.json handles control characters too (raw \n in an error message
     // would otherwise produce an unparsable error response).
@@ -347,7 +353,6 @@ class ConfigServer(
     companion object {
         // portal-remote already owns 8080 on this device.
         const val PORT = 8090
-        // Generous for base64 photos on /api/ai/import, tiny vs the heap.
-        const val MAX_BODY = 16 * 1024 * 1024
+        private val DEFAULT_ON = setOf("calendar", "chores", "lists", "meals")
     }
 }

@@ -69,7 +69,7 @@ object GoogleCal {
             throw IllegalArgumentException("enter both the Client ID and the Client secret")
         prefs(ctx).edit()
             .putString("g_client_id", clientId)
-            .putString("g_client_secret", clientSecret)
+            .putString("g_client_secret", Secrets.seal(clientSecret))
             .apply()
         fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
         return "https://accounts.google.com/o/oauth2/v2/auth" +
@@ -87,7 +87,7 @@ object GoogleCal {
         val p = prefs(ctx)
         val clientId = p.getString("g_client_id", null)
             ?: throw IllegalArgumentException("enter the Client ID/secret and get a sign-in link first")
-        val clientSecret = p.getString("g_client_secret", "")!!
+        val clientSecret = Secrets.open(p.getString("g_client_secret", null)) ?: ""
 
         val resp = postForm(TOKEN_URL, FormBody.Builder()
             .add("code", java.net.URLDecoder.decode(code, "UTF-8"))
@@ -100,8 +100,8 @@ object GoogleCal {
         if (refresh.isEmpty())
             throw IllegalArgumentException("Google didn't return a refresh token — remove this app at myaccount.google.com/permissions and sign in again")
         p.edit()
-            .putString("g_refresh", refresh)
-            .putString("g_access", resp.getString("access_token"))
+            .putString("g_refresh", Secrets.seal(refresh))
+            .putString("g_access", Secrets.seal(resp.getString("access_token")))
             .putLong("g_token_exp", System.currentTimeMillis() + resp.optLong("expires_in", 3600) * 1000)
             .apply()
 
@@ -177,25 +177,25 @@ object GoogleCal {
 
     private fun accessToken(ctx: Context): String {
         val p = prefs(ctx)
-        val cached = p.getString("g_access", null)
+        val cached = Secrets.open(p.getString("g_access", null))
         if (cached != null && System.currentTimeMillis() < p.getLong("g_token_exp", 0) - 60_000)
             return cached
-        val refresh = p.getString("g_refresh", null)
+        val refresh = Secrets.open(p.getString("g_refresh", null))
             ?: throw IllegalArgumentException("Google isn't connected yet")
         val resp = postForm(TOKEN_URL, FormBody.Builder()
             .add("client_id", p.getString("g_client_id", "")!!)
-            .add("client_secret", p.getString("g_client_secret", "")!!)
+            .add("client_secret", Secrets.open(p.getString("g_client_secret", null)) ?: "")
             .add("refresh_token", refresh)
             .add("grant_type", "refresh_token")
             .build())
         val token = resp.getString("access_token")
         val edit = p.edit()
-            .putString("g_access", token)
+            .putString("g_access", Secrets.seal(token))
             .putLong("g_token_exp", System.currentTimeMillis() + resp.optLong("expires_in", 3600) * 1000)
         // If Google ever rotates the refresh token, persist it BEFORE using
         // anything — a rotated-but-unpersisted token bricks the connection.
         resp.optString("refresh_token").takeIf { it.isNotEmpty() }
-            ?.let { edit.putString("g_refresh", it) }
+            ?.let { edit.putString("g_refresh", Secrets.seal(it)) }
         edit.commit() // synchronous: a crash right after must not lose this
         return token
     }

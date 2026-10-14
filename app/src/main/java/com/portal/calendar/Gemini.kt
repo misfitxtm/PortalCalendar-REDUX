@@ -56,7 +56,7 @@ object Gemini {
             if (models.isEmpty())
                 throw IllegalArgumentException("that key works, but no usable Gemini models were found on it")
             prefs(ctx).edit()
-                .putString("ai_key", key.trim())
+                .putString("ai_key", Secrets.seal(key.trim()))
                 .putString("ai_models", JSONArray(models).toString())
                 .putString("ai_model",
                     prefs(ctx).getString("ai_model", "").takeIf { it in models } ?: pickDefault(models))
@@ -73,9 +73,9 @@ object Gemini {
         val out = ArrayList<String>()
         var pageToken: String? = null
         do { // the list spans pages now — one page can miss newer models
-            val url = "$BASE/models?pageSize=50&key=$key" +
+            val url = "$BASE/models?pageSize=50" +
                 (pageToken?.let { "&pageToken=$it" } ?: "")
-            val req = Request.Builder().url(url).build()
+            val req = Request.Builder().url(url).header("x-goog-api-key", key).build()
             client.newCall(req).execute().use { resp ->
                 if (resp.code == 400 || resp.code == 403)
                     throw IllegalArgumentException("Google rejected that API key — copy it from aistudio.google.com → Get API key")
@@ -104,7 +104,7 @@ object Gemini {
 
     /** One generateContent call; retries once on a fallback model if needed. */
     fun generate(ctx: Context, prompt: String, imageB64: String?, mime: String?): String {
-        val key = prefs(ctx).getString("ai_key", null)
+        val key = Secrets.open(prefs(ctx).getString("ai_key", null))
             ?: throw IllegalArgumentException("AI isn't set up — add a Gemini key in Settings")
         val model = prefs(ctx).getString("ai_model", "").orEmpty()
             .ifEmpty { pickDefault(parseModels(ctx)) }
@@ -139,7 +139,8 @@ object Gemini {
             .put("contents", JSONArray().put(JSONObject().put("parts", parts)))
             .put("generationConfig", JSONObject().put("response_mime_type", "application/json"))
         val req = Request.Builder()
-            .url("$BASE/models/$model:generateContent?key=$key")
+            .url("$BASE/models/$model:generateContent")
+            .header("x-goog-api-key", key)
             .post(body.toString().toRequestBody(JSON_T))
             .build()
         client.newCall(req).execute().use { resp ->

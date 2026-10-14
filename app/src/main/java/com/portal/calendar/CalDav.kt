@@ -79,7 +79,7 @@ object CalDav {
         cals.forEach { arr.put(JSONObject().put("name", it.name).put("href", it.href)) }
         prefs(ctx).edit()
             .putString("icloud_email", email)
-            .putString("icloud_password", password)
+            .putString("icloud_password", Secrets.seal(password))
             .putString("icloud_cals", arr.toString())
             .apply()
         return cals
@@ -89,7 +89,7 @@ object CalDav {
     fun addEventTo(ctx: Context, target: String, title: String,
                    startMillis: Long, endMillis: Long, allDay: Boolean): String {
         val email = email(ctx) ?: throw IllegalArgumentException("iCloud isn't connected yet")
-        val password = prefs(ctx).getString("icloud_password", null)
+        val password = Secrets.open(prefs(ctx).getString("icloud_password", null))
             ?: throw IllegalArgumentException("iCloud isn't connected yet")
 
         val uid = UUID.randomUUID().toString().uppercase(Locale.US)
@@ -132,7 +132,7 @@ object CalDav {
     fun deleteByUid(ctx: Context, uid: String): Boolean {
         if (uid.isBlank()) return false
         val email = email(ctx) ?: return false
-        val pw = prefs(ctx).getString("icloud_password", null) ?: return false
+        val pw = Secrets.open(prefs(ctx).getString("icloud_password", null)) ?: return false
         for (cal in calendars(ctx)) {
             // Fast path: events we (and Apple's own clients) create live at
             // {collection}/{uid}.ics. Try a direct DELETE first; a 404 just
@@ -212,7 +212,6 @@ object CalDav {
             """<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
                <d:prop><d:displayname/><d:resourcetype/><c:supported-calendar-component-set/></d:prop>
                </d:propfind>""")
-        android.util.Log.i("PortalCalDAV", "calendar-home response (${xml.length} chars): " + xml.take(6000))
         val out = ArrayList<CalInfo>()
         for (m in Regex("<(?:\\w+:)?response[ >](.*?)</(?:\\w+:)?response>",
                 setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)).findAll(xml)) {
