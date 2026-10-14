@@ -110,6 +110,13 @@ class ConfigServer(
             App.instance.notifyDataChanged()
             json(voiceJson())
         }
+        // A computer typing the 6-digit pairing code. The gate lets this POST through unauthenticated, so the code is the check.
+        s.uri == "/pair" && s.method == Method.POST ->
+            if (PairingCode.redeem(org.json.JSONObject(String(s.body, Charsets.UTF_8)).optString("code")))
+                json(org.json.JSONObject().put("token", store.serverToken()).toString())
+            else resp(401, "application/json", "{\"error\":\"wrong or expired code. Get a new one if this keeps happening.\"}")
+        s.uri == "/api/pair/new" && s.method == Method.POST ->
+            json(org.json.JSONObject().put("code", PairingCode.issue()).put("seconds", PairingCode.LIFETIME_MS / 1000).toString())
         // Opened by the shopping-list QR. The gate lets /dl/ through, so the short-lived code is the only check here.
         s.uri == "/dl/shopping-list.md" && s.method == Method.GET ->
             if (!DownloadLink.valid(s.param("c"))) resp(401, "text/plain", "this link has expired — scan the QR code again")

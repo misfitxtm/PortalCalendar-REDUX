@@ -16,8 +16,8 @@ android {
     minSdk = 28
     // Portal+ gen-1 is API 28; staying at 28 avoids newer background restrictions.
     targetSdk = 28
-    versionCode = 31
-    versionName = "4.0.0-redux.5"
+    versionCode = 32
+    versionName = "4.0.0-redux.6"
     // The Portal is arm64 only; this also keeps Vosk's native libraries from bloating the APK.
     ndk { abiFilters += "arm64-v8a" }
   }

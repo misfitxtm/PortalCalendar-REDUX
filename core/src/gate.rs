@@ -52,6 +52,11 @@ impl Gate {
         if r.method == "GET" && (r.path == "/manifest.json" || r.path == "/icon.svg") {
             return Verdict::Allow;
         }
+        // A computer signing in with a pairing code. The handler checks the code (single use, few tries);
+        // the same-origin check above already stops other websites from posting to it.
+        if r.method == "POST" && r.path == "/pair" {
+            return Verdict::Allow;
+        }
         // One-off file links (the shopping list QR). The handler checks the short-lived code in the query,
         // so this lets nothing through by itself; ".." is refused here so the prefix can't be used to climb out.
         if r.method == "GET" && r.path.starts_with("/dl/") && !r.path.contains("..") {
@@ -172,6 +177,18 @@ mod tests {
         assert_eq!(gate().check(&get), Verdict::Allow);
         let post = Req { method: "POST", ..get };
         assert_eq!(gate().check(&post), Verdict::Reject(401, "unauthorized"));
+    }
+
+    #[test]
+    fn pairing_endpoint_is_open_to_post_only_and_still_same_origin() {
+        let post = Req { method: "POST", path: "/pair", cookie: None, ..req() };
+        assert_eq!(gate().check(&post), Verdict::Allow);
+        let get = Req { method: "GET", path: "/pair", cookie: None, ..req() };
+        assert_eq!(gate().check(&get), Verdict::Reject(401, "unauthorized"));
+        let cross = Req { method: "POST", path: "/pair", cookie: None, origin: Some("http://evil.example"), ..req() };
+        assert_eq!(gate().check(&cross), Verdict::Reject(403, "bad origin"));
+        let other = Req { method: "POST", path: "/pair/new", cookie: None, ..req() };
+        assert_eq!(gate().check(&other), Verdict::Reject(401, "unauthorized"));
     }
 
     #[test]

@@ -107,6 +107,11 @@ adb shell appops set com.portalhub.redux GET_USAGE_STATS allow
    camera and open the link in your browser. That opens the setup page and signs it in. If you reinstall
    the app the code changes, so scan the new one; an old bookmark or home-screen icon won't sign in.
 
+**A computer that can't scan the QR code:** open `http://<portal-ip>:8090` in its browser and type a 6-digit
+pairing code. Get the code from the Portal (⚙ Settings → 💻 Pair a computer) or from a phone that is
+already signed in (setup page → Settings → Sign in a computer). A code works once and expires after 5
+minutes, and five wrong tries cancel it. The access token itself can't be switched off.
+
 **Already running the original PortalHub?** This fork has its own app id (`com.portalhub.redux`), so
 both can be installed, but they both use port 8090, so stop or remove the original first. Your data
 doesn't carry over automatically: in the old app use Settings → Backup, then `adb uninstall
