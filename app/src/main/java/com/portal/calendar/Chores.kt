@@ -524,18 +524,12 @@ object Chores {
                     for (i in arr.length() - 1 downTo 0) if (arr.getJSONObject(i).optString("key") == key) arr.remove(i)
                 }
             }
-            "resetWeekPoints" -> {
-                // Zeroes this week's earned points for one person by logging a matching negative adjustment,
-                // so it shows in the history and can be undone. Anything already spent stays spent.
+            "resetWeekPoints" -> zeroWeek(ctx, action.getString("memberId"), action.optString("reason").trim().take(60).ifEmpty { "Week reset" })
+            "nuke" -> {
+                // The manual "nuclear option" for someone who really got in trouble: week to zero, plus the angry screen.
                 val mid = action.getString("memberId")
-                if (Members.byId(ctx, mid) == null) throw IllegalArgumentException("unknown family member")
-                val earned = weekTotals(ctx, Data.readArray(ctx, FILE), Data.readArray(ctx, DONE), weekStartStr()).first.optInt(mid)
-                if (earned > 0) Data.mutate(ctx, POINTS) { arr ->
-                    arr.put(JSONObject().put("id", UUID.randomUUID().toString()).put("memberId", mid).put("delta", -earned)
-                        .put("reason", action.optString("reason").trim().take(60).ifEmpty { "Week reset" })
-                        .put("date", dayFmt().format(Date())))
-                    prune(arr)
-                }
+                if (!zeroWeek(ctx, mid, "Nuclear option")) throw IllegalArgumentException("already at 0 stars this week")
+                App.instance.notifyAccident(Members.byId(ctx, mid)?.name ?: "")
             }
             "undoAdjust" -> {
                 val id = action.getString("id")
@@ -655,6 +649,46 @@ object Chores {
         val cut = dayFmt().format(cutoff.time)
         for (i in done.length() - 1 downTo 0)
             if (done.getJSONObject(i).optString("date") < cut) done.remove(i)
+    }
+
+    /**
+     * Zeroes everyone's points for this week: drops this week's bonuses, penalties and spending, then, unless the
+     * chores are being cleared too, cancels what the checked-off chores earned (so the checkmarks stay).
+     */
+    fun resetWeekPointsAll(ctx: Context, choresAlsoCleared: Boolean) {
+        val ws = weekStartStr()
+        Data.mutate(ctx, POINTS) { arr ->
+            for (i in arr.length() - 1 downTo 0) if (arr.getJSONObject(i).optString("date") >= ws) arr.remove(i)
+        }
+        if (choresAlsoCleared) return
+        val earned = weekTotals(ctx, Data.readArray(ctx, FILE), Data.readArray(ctx, DONE), ws).first
+        Data.mutate(ctx, POINTS) { arr ->
+            for (m in earned.keys()) if (earned.optInt(m) > 0)
+                arr.put(JSONObject().put("id", UUID.randomUUID().toString()).put("memberId", m).put("delta", -earned.optInt(m))
+                    .put("reason", "Week reset").put("date", dayFmt().format(Date())))
+        }
+    }
+
+    /**
+     * Zeroes this week's earned points for one person by logging a matching negative adjustment, so it shows in the
+     * history and can be undone. Anything already spent stays spent. Returns false when there was nothing to take.
+     */
+    private fun zeroWeek(ctx: Context, mid: String, reason: String): Boolean {
+        if (Members.byId(ctx, mid) == null) throw IllegalArgumentException("unknown family member")
+        val earned = weekTotals(ctx, Data.readArray(ctx, FILE), Data.readArray(ctx, DONE), weekStartStr()).first.optInt(mid)
+        if (earned <= 0) return false
+        Data.mutate(ctx, POINTS) { arr ->
+            arr.put(JSONObject().put("id", UUID.randomUUID().toString()).put("memberId", mid).put("delta", -earned)
+                .put("reason", reason).put("date", dayFmt().format(Date())))
+            prune(arr)
+        }
+        return true
+    }
+
+    /** Removes every chore and its check-off history; people, points, rewards and profiles stay. */
+    fun clearChores(ctx: Context) {
+        Data.writeArray(ctx, FILE, JSONArray())
+        Data.writeArray(ctx, DONE, JSONArray())
     }
 
     private fun weekStartStr(): String = Rules.pointsWeekStart(LocalDate.now()).toString()

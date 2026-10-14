@@ -23,7 +23,7 @@ import kotlin.math.roundToInt
  * items from presets, or type one. The PIN gate is applied by the board when the
  * tab is opened (see BoardController.setTabLocked), not here.
  */
-class ShoppingTab(private val ctx: Context) {
+class ShoppingTab(private val ctx: Context, private val onSavePhone: () -> Unit = {}) {
     private var category = ""
     private lateinit var itemsBox: LinearLayout
     private lateinit var catRow: LinearLayout
@@ -56,6 +56,14 @@ class ShoppingTab(private val ctx: Context) {
             setPadding(dp(16), dp(7), dp(16), dp(7))
             setOnClickListener { act(JSONObject().put("action", "clearDone")) }
         }
+        head.addView(TextView(ctx).apply {
+            text = "📱 Save to phone"
+            textSize = 14f
+            setTextColor(INK)
+            background = rounded(PILL, 18)
+            setPadding(dp(16), dp(7), dp(16), dp(7))
+            setOnClickListener { onSavePhone() }
+        }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(8) })
         head.addView(clearBtn)
         root.addView(head, lp(bottom = dp(12)))
 

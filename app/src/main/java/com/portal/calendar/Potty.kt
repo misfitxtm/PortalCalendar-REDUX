@@ -26,6 +26,12 @@ object Potty {
         return m
     }
 
+    /** Erases every mark, accident and bonus record; which kids use the tracker stays. */
+    fun clearAll(ctx: Context) {
+        Data.writeArray(ctx, FILE, JSONArray())
+        Data.writeArray(ctx, BONUS, JSONArray())
+    }
+
     fun statusJson(ctx: Context): String {
         val today = LocalDate.now()
         val log = Data.readArray(ctx, FILE)

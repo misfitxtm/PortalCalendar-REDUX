@@ -71,6 +71,12 @@ object Routines {
             .toString()
     }
 
+    /** Removes every get-ready item and its check-off history. */
+    fun clearAll(ctx: Context) {
+        Data.writeArray(ctx, FILE, JSONArray())
+        Data.writeArray(ctx, DONE, JSONArray())
+    }
+
     fun mutate(ctx: Context, action: JSONObject): String {
         when (action.getString("action")) {
             "addItem" -> {

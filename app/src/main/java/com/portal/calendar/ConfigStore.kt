@@ -212,11 +212,11 @@ class ConfigStore(ctx: Context) {
         prefs.edit().putString("orientation", clean).commit()
     }
 
-    /** Theme: "light" (default) / "dark" / "auto" (night by clock) / "system". */
-    fun theme(): String = prefs.getString("theme", "light") ?: "light"
+    /** Theme: "light" / "dark" (default, also after a reset) / "auto" (night by clock) / "system". */
+    fun theme(): String = prefs.getString("theme", "dark") ?: "dark"
 
     fun setTheme(v: String) {
-        val clean = if (v in listOf("light", "dark", "auto", "system")) v else "light"
+        val clean = if (v in listOf("light", "dark", "auto", "system")) v else "dark"
         prefs.edit().putString("theme", clean).commit()
     }
 
