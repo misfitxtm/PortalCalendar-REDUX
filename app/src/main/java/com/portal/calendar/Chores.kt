@@ -15,7 +15,7 @@ import java.util.UUID
  * weekdays (1=Sun … 7=Sat, matching java.util.Calendar). Completions are an
  * append-only log of {choreId, date, memberId}; toggling today removes/adds
  * the entry. Points this week = each completion's stamped value (default 1)
- * plus manual parent adjustments (bonus / penalty), floored at 0 and compared
+ * plus manual parent adjustments (bonus / penalty), compared
  * against a per-member weekly goal. The week runs Friday through Thursday
  * ([Rules.pointsWeekStart]). memberId and points are stamped at completion
  * time so a star survives its chore being pruned or deleted (older logs
@@ -259,7 +259,7 @@ object Chores {
             .ifEmpty { throw IllegalArgumentException("pick at least one family member") }
 
     /**
-     * This week's points per member: earned (completions + bonus/penalty, floored at 0), spent on
+     * This week's points per member: earned (completions + bonus/penalty, can go below 0), spent on
      * rewards, and the adjustment log newest-first. Redemptions are log entries with kind "redeem".
      */
     private fun weekTotals(ctx: Context, chores: JSONArray, done: JSONArray, weekStart: String, weekEnd: String? = null):
@@ -293,7 +293,6 @@ object Chores {
             else add(stars, a.optString("memberId"), a.optInt("delta"))
             adjustments.put(a)
         }
-        for (k in stars.keys().asSequence().toList()) stars.put(k, stars.optInt(k).coerceAtLeast(0))
         return Triple(stars, spent, adjustments)
     }
 
@@ -487,6 +486,7 @@ object Chores {
                         .firstOrNull { it.optString("id") == action.getString("rewardId") }
                 } ?: throw IllegalArgumentException("that reward no longer exists")
                 val cost = reward.optInt("cost")
+                if (!Rules.shopOpen(LocalDate.now())) throw IllegalArgumentException("the Reward Shop opens on Thursday")
                 // Check and spend under one lock so two taps can't overdraw.
                 synchronized(this) {
                     val (stars, spent, _) = weekTotals(ctx, Data.readArray(ctx, FILE), Data.readArray(ctx, DONE), weekStartStr())

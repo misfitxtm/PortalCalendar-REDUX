@@ -285,7 +285,7 @@ class BoardController(private val baseCtx: Context) {
     /** Lays the tab cards out in the order chosen in Settings. */
     private fun applyTabOrder() {
         tabRowView.removeAllViews()
-        for (i in tabOrderIdx()) tabRowView.addView(tabButtons[i], LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(8) })
+        for (i in tabOrderIdx()) tabRowView.addView(tabButtons[i], LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(4); rightMargin = dp(4) })
     }
 
     private fun startTab(flags: List<Boolean> = Rules.effectiveTabs(store.tabFlags())) =
@@ -1940,6 +1940,7 @@ class BoardController(private val baseCtx: Context) {
         // Top-level tab strip ---------------------------------------------
         val tabRow = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_HORIZONTAL
             setPadding(dp(22), dp(12), dp(22), 0)
         }
         val tabs = ArrayList<TextView>()
@@ -1950,7 +1951,7 @@ class BoardController(private val baseCtx: Context) {
                 gravity = Gravity.CENTER
                 typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                 minimumHeight = dp(48) // comfortable tap target at arm's length
-                setPadding(dp(18), dp(8), dp(18), dp(8))
+                setPadding(dp(14), dp(8), dp(14), dp(8))
                 // Shopping is parent-locked: ask for the PIN each time it is opened.
                 setOnClickListener { if (i == Rules.SHOPPING_TAB) requirePin { setTab(i) } else setTab(i) }
             }

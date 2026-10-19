@@ -123,6 +123,11 @@ class ConfigServer(
             else resp(200, "text/markdown", Shopping.markdown(
                 Data.readArray(ctx, "shopping.json").let { a -> (0 until a.length()).map { a.getJSONObject(it).let { o -> o.optString("name") to o.optBoolean("done") } } },
                 java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())))
+        // One photo per request (raw bytes), so a phone can upload a whole batch one by one with progress.
+        s.uri == "/api/photos" && s.method == Method.GET ->
+            json(org.json.JSONObject().put("count", Photos.count()).toString())
+        s.uri == "/api/photos" && s.method == Method.POST ->
+            json(org.json.JSONObject().put("saved", Photos.save(ctx, s.param("name") ?: "", s.body)).put("count", Photos.count()).toString())
         s.uri == "/api/shopping" && s.method == Method.GET ->
             json(Shopping.statusJson(ctx))
         s.uri == "/api/shopping" && s.method == Method.POST ->

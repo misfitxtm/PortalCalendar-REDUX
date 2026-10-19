@@ -14,6 +14,19 @@ class RulesTest {
         assertEquals(d("2026-10-09"), Rules.pointsWeekStart(d("2026-10-11"))) // Sun
     }
 
+    @Test fun shopOpensOnlyOnThursday() {
+        assertEquals(true, Rules.shopOpen(d("2026-10-15"))) // Thu
+        assertEquals(false, Rules.shopOpen(d("2026-10-16"))) // Fri
+        assertEquals(false, Rules.shopOpen(d("2026-10-18"))) // Sun
+    }
+
+    @Test fun alternatingWeeksFlipEveryFriday() {
+        assertEquals(Rules.weekSlot(d("2026-10-09")), Rules.weekSlot(d("2026-10-15"))) // Fri..Thu same slot
+        assertEquals(false, Rules.weekSlot(d("2026-10-15")) == Rules.weekSlot(d("2026-10-16")))
+        assertEquals(true, Rules.onSchedule("", d("2026-10-16")))
+        assertEquals(true, Rules.onSchedule("A", d("2026-10-16")) != Rules.onSchedule("B", d("2026-10-16")))
+    }
+
     private fun run(vararg dry: Boolean, start: String = "2026-10-01") =
         dry.mapIndexed { i, v -> d(start).plusDays(i.toLong()) to v }.toMap()
 

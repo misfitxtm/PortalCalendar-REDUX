@@ -134,6 +134,7 @@ class RoutinesTab(
             }
             val member = (0 until members.length()).map { members.getJSONObject(it) }
                 .find { it.optString("id") == mid }
+            if (member != null && !Rules.onSchedule(member.optString("week"), java.time.LocalDate.now())) continue
             val name = member?.optString("name") ?: "Anyone"
             val color = Members.parse(member?.optString("color") ?: "#A3A8B0")
             val doneCount = list.count { doneToday.contains(it.optString("id")) }

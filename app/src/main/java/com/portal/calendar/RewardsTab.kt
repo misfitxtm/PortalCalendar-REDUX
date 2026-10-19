@@ -60,7 +60,8 @@ class RewardsTab(
         }, lp(bottom = dp(10)))
 
         if (members.length() == 0) { view.addView(note("Add family members first — set them up from your phone.")); return }
-        val kids = (0 until members.length()).map { members.getJSONObject(it) }
+        val kids = (0 until members.length()).map { members.getJSONObject(it) }.filter { Members.onSchedule(ctx, it.getString("id")) }
+        if (kids.isEmpty()) { view.addView(note("Nobody is at this house this week.")); return }
         val me = kids.firstOrNull { it.getString("id") == selected } ?: kids.first().also { selected = it.getString("id") }
         val left = spendable.optInt(me.getString("id"))
 
@@ -84,6 +85,8 @@ class RewardsTab(
             setTextColor(INK)
         }, lp(bottom = dp(12)))
 
+        val open = Rules.shopOpen(java.time.LocalDate.now())
+        if (!open) view.addView(note("🔒 The shop opens on Thursday, the last day of the week.\nKeep earning!"), lp(bottom = dp(12)))
         if (rewards.length() == 0) {
             view.addView(note("No rewards yet.\nAdd some from your phone: Chores → Rewards."))
             return
@@ -96,7 +99,7 @@ class RewardsTab(
             val r = rewards.getJSONObject(i)
             if (i % cols == 0) row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
             val cost = r.optInt("cost")
-            val ok = left >= cost
+            val ok = open && left >= cost
             row!!.addView(card(r, cost, ok, cost - left) { anchor ->
                 onPick(anchor, me.getString("id"), me.getString("name"), r.getString("id"), r.getString("name"))
             }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { setMargins(dp(5), dp(5), dp(5), dp(5)) })
