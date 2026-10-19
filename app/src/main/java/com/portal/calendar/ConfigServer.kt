@@ -177,6 +177,15 @@ class ConfigServer(
             store.setWizardDone()
             json("{\"fresh\":false}")
         }
+        s.uri == "/api/week" && s.method == Method.GET ->
+            json(weekJson())
+        s.uri == "/api/week" && s.method == Method.POST -> {
+            val o = org.json.JSONObject(readBody(s))
+            val shop = o.getJSONArray("shopDays").let { a -> (0 until a.length()).map { a.getInt(it) }.toSet() }
+            store.setPointsWeek(o.getInt("pointsWeekStart"), shop)
+            App.instance.notifyDataChanged()
+            json(weekJson())
+        }
         s.uri == "/api/features" && s.method == Method.GET ->
             json(featuresJson())
         s.uri == "/api/features" && s.method == Method.POST -> {
@@ -376,6 +385,9 @@ class ConfigServer(
     private fun readBody(s: Req) = String(s.body, Charsets.UTF_8)
 
     // Opt-in tabs (routines, potty, shopping) default off; the rest default on.
+    private fun weekJson() = org.json.JSONObject()
+        .put("pointsWeekStart", store.pointsWeekStart()).put("shopDays", org.json.JSONArray(store.shopDays().sorted())).toString()
+
     private fun featuresJson(): String = org.json.JSONObject().also { o ->
         Rules.TAB_KEYS.forEach { o.put(it, store.featureEnabled(it, default = it in DEFAULT_ON)) }
         o.put("defaultTab", store.defaultTab())

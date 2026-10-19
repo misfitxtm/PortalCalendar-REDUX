@@ -69,7 +69,7 @@ class BoardController(private val baseCtx: Context) {
     private var lastDayStamp = ""
     private var statusLine = "Starting…"
 
-    // Top-level tabs: 0=Calendar 1=Chores 2=Lists 3=Meals 4=Get Ready (routines) 5=Pee Tracker 6=Shopping 7=Reward Shop (the strip order is the user's choice)
+    // Top-level tabs: 0=Calendar 1=Chores 2=Lists 3=Meals 4=Get Ready (routines) 5=Potty Tracker 6=Shopping 7=Reward Shop (the strip order is the user's choice)
     private var currentTab = 0
     private lateinit var tabButtons: List<TextView>
     private lateinit var tabPanels: List<View>
@@ -167,9 +167,26 @@ class BoardController(private val baseCtx: Context) {
     private val clockTick = object : Runnable {
         override fun run() {
             updateClock()
+            pottyChime()
             handler.postDelayed(this, 1000)
         }
     }
+    private var lastChimeSlot = -1
+
+    /** "Bathroom time" on the hour every few hours between 8am and 7pm, when the Potty Tracker is on and a chime is chosen. */
+    private fun pottyChime() {
+        val every = store.pottyChimeHours()
+        if (every == 0 || !store.featureEnabled("potty", default = false) || stopped) return
+        val now = Calendar.getInstance()
+        val h = now.get(Calendar.HOUR_OF_DAY)
+        if (now.get(Calendar.MINUTE) != 0 || h !in 8..19 || (h - 8) % every != 0) return
+        val slot = now.get(Calendar.DAY_OF_YEAR) * 24 + h
+        if (slot == lastChimeSlot) return
+        lastChimeSlot = slot
+        if (store.soundEffects()) PowerUpSound.play()
+        android.widget.Toast.makeText(ctx, "🚽 Bathroom time!", android.widget.Toast.LENGTH_LONG).show()
+    }
+
     private val syncTick = object : Runnable {
         override fun run() {
             doSync()
@@ -588,6 +605,8 @@ class BoardController(private val baseCtx: Context) {
         root.addView(routineOverlay, FrameLayout.LayoutParams(MATCH, MATCH))
         mealAiOverlay = buildMealAiOverlay()
         root.addView(mealAiOverlay, FrameLayout.LayoutParams(MATCH, MATCH))
+        poopOverlay = FrameLayout(ctx).apply { setBackgroundColor(Palette.BG); visibility = View.GONE; isClickable = true }
+        root.addView(poopOverlay, FrameLayout.LayoutParams(MATCH, MATCH))
         confirmOverlay = buildConfirmOverlay()
         root.addView(confirmOverlay, FrameLayout.LayoutParams(MATCH, MATCH))
         pinOverlay = buildPinOverlay()
@@ -669,6 +688,14 @@ class BoardController(private val baseCtx: Context) {
     // ---------------------------------------------------- big celebration
 
     private lateinit var partyOverlay: FrameLayout
+    private lateinit var poopOverlay: FrameLayout
+
+    /** Shows [content] over the whole screen (the Potty Tracker's picture chart), or hides the overlay when null. */
+    private fun showPoopOverlay(content: View?) {
+        poopOverlay.removeAllViews()
+        if (content != null) poopOverlay.addView(content, FrameLayout.LayoutParams(MATCH, MATCH))
+        poopOverlay.visibility = if (content == null) View.GONE else View.VISIBLE
+    }
     private lateinit var partyEmoji: TextView
     private lateinit var partyTitle: TextView
     private lateinit var partySub: TextView
@@ -2017,6 +2044,7 @@ class BoardController(private val baseCtx: Context) {
             onAllDone = { name -> celebrateBig("routines", if (name.isBlank() || name == "Anyone") "All done!" else "All done, $name!", "Everything on the list is checked off 🎉") })
         area.addView(routinesTab.view, FrameLayout.LayoutParams(MATCH, MATCH))
         pottyTab = PottyTab(ctx,
+            onOverlay = { v -> showPoopOverlay(v) },
             onCelebrate = { name, streak, milestone ->
                 celebrateBig("potty", if (name.isBlank()) "Great job!" else "Great job, $name!",
                     if (milestone) "🔥 $streak dry days in a row!" else "Dry night! 🔥 Streak: $streak")
@@ -2495,12 +2523,12 @@ class BoardController(private val baseCtx: Context) {
 
     private lateinit var orderBox: LinearLayout
 
-    /** "Start fresh": reset one part of the hub (week's points, chores, Pee Tracker, Get Ready) after a confirmation. */
+    /** "Start fresh": reset one part of the hub (week's points, chores, Potty Tracker, Get Ready) after a confirmation. */
     private fun showResetMenu(anchor: View) {
         val opts = listOf(
             Triple("⭐ This week's points", "points", "Everyone's points this week go to zero, including bonuses, penalties and anything spent. Checked-off chores stay checked."),
             Triple("✅ Chores", "chores", "Removes every chore and its check-off history. People, points, rewards and chore profiles stay."),
-            Triple("🚽 Pee Tracker", "potty", "Erases every mark, streak, accident and bonus record. Who uses the tracker stays."),
+            Triple("🚽 Potty Tracker", "potty", "Erases every mark, streak, accident and bonus record. Who uses the tracker stays."),
             Triple("⏰ Get Ready lists", "routines", "Removes every Get Ready item and its check-off history."))
         val menu = android.widget.PopupMenu(ctx, anchor)
         opts.forEachIndexed { i, o -> menu.menu.add(0, i, i, o.first) }

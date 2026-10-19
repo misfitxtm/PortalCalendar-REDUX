@@ -28,7 +28,7 @@ screenshots. This fork keeps their MIT license and copyright in [LICENSE](LICENS
   costs you can change. Spending uses this week's points, which reset every Friday. On the setup page
   every reward's emoji, name and cost can be edited in place. The board's shop is a gold marquee with
   gift and money emoji, and the rewards a kid can afford glow gold with a "Get it!" button.
-- **Celebrations:** finishing a Get Ready list, or marking a dry night in the Pee Tracker, plays a
+- **Celebrations:** finishing a Get Ready list, or marking a dry night in the Potty Tracker, plays a
   full-screen party: a bouncing trophy or star, confetti and a rising power-up jingle (a synthesized
   chiptune run, not a recording). Each can be switched off, and previewed, on the setup page under
   Settings → Celebrations.
@@ -40,7 +40,7 @@ screenshots. This fork keeps their MIT license and copyright in [LICENSE](LICENS
   how much is done, and finishing the list celebrates. An item can be linked to a chore: ticking "Make
   bed" in Get Ready checks off that kid's "Make the bed" chore (and its points) too.
 - **Friday recap:** the first days of a new points week show last week's points per kid.
-- **🚽 Pee Tracker (optional):** a dry-night streak toward 3 weeks with milestones at 3, 7, 14 and 21
+- **🚽 Potty Tracker (optional):** a dry-night streak toward 3 weeks with milestones at 3, 7, 14 and 21
   days, and a month calendar. You choose which kids use it. An "Accident while awake" button (parent
   PIN, with a confirmation) starts that kid's whole week over: streak, this week's marks and this week's
   chore points go to zero, and the board plays an angry reaction with a siren and three falling "womps"
@@ -59,7 +59,7 @@ screenshots. This fork keeps their MIT license and copyright in [LICENSE](LICENS
   Points card on the setup page) it takes every star they earned this week down to zero and plays the angry
   screen with the siren. Checked chores stay checked, and it shows in the history so it can be undone.
 - **Start fresh:** reset just one part without touching the rest: this week's points, all chores, the
-  Pee Tracker, or the Get Ready lists. Settings → ↺ Start fresh… on the Portal, or Settings → Start
+  Potty Tracker, or the Get Ready lists. Settings → ↺ Start fresh… on the Portal, or Settings → Start
   fresh on the setup page (type RESET). People, rewards, profiles and settings stay.
 - **Reset PortalHub:** Settings → Reset PortalHub (Portal, double confirmation) or the setup page (type
   RESET) erases all data and settings and returns the app to a fresh install. Back up first.

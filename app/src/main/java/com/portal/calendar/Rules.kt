@@ -68,14 +68,14 @@ object Rules {
         else -> "evening"
     }
 
-    /** Is [date] in the same Friday-to-Thursday week as [today], and not in the future? */
+    /** Is [date] in the same points week as [today], and not in the future? */
     fun inPointsWeek(date: LocalDate, today: LocalDate): Boolean =
         !date.isBefore(pointsWeekStart(today)) && !date.isAfter(today)
 
-    /** The Reward Shop opens only on Thursday, the last day of the Friday-to-Thursday week, so penalties land before spending. */
-    fun shopOpen(day: LocalDate) = day.dayOfWeek == DayOfWeek.THURSDAY
+    /** The Reward Shop is open only on its chosen days (by default the last day of the week), so penalties land before spending. */
+    fun shopOpen(day: LocalDate) = day.dayOfWeek in openDays()
 
-    /** Which alternating week [day] falls in: "A" or "B", flipping every Friday. */
+    /** Which alternating week [day] falls in: "A" or "B", flipping when each week starts. */
     fun weekSlot(day: LocalDate): String =
         if (java.time.temporal.ChronoUnit.WEEKS.between(LocalDate.of(2026, 1, 2), pointsWeekStart(day)) % 2 == 0L) "A" else "B"
 
@@ -91,15 +91,62 @@ object Rules {
 
     fun nextPottyMilestone(streak: Int): Int? = POTTY_MILESTONES.firstOrNull { it > streak }
 
+    /** Daily bathroom habits a kid can tick; effort, not outcomes. */
+    val EFFORT_ITEMS = listOf("morning", "meal", "bedtime", "water", "told")
+    val EFFORT_LABELS = listOf("🌅 Morning sit", "🍽️ Sat after a meal", "🌙 Peed before bed", "💧 Drank water", "📣 Told a grown-up early")
+
+    /** Picture-first versions for a child who can't read yet: a big picture and one or two short words. */
+    val EFFORT_PICTURES = listOf("🌅🚽", "🍽️🚽", "🌙🚽", "🥛", "🙋")
+    val EFFORT_SHORT = listOf("Morning", "After meal", "Bed time", "Water", "I told")
+
+    /** Kid-chart names under the drawn pictures ([StoolIcon]): 4 is the ideal. */
+    val STOOL_NAMES = listOf("1 Pellets", "2 Lumpy", "3 Cracked", "4 Smooth", "5 Blobs", "6 Mushy", "7 Runny")
+
+    /** This many habits ticked in a day earns one bonus star. */
+    const val EFFORT_BONUS_NEEDED = 3
+
+    fun effortBonus(done: Int) = done >= EFFORT_BONUS_NEEDED
+
+    /** A parent heads-up once nobody has pooped for this many days. */
+    const val NO_POOP_ALERT_DAYS = 3
+
+    /** Days since the last poop, or null when none is recorded. */
+    fun daysSincePoop(dates: Collection<LocalDate>, today: LocalDate): Int? =
+        dates.maxOrNull()?.let { java.time.temporal.ChronoUnit.DAYS.between(it, today).toInt().coerceAtLeast(0) }
+
+    /** Longest run of days with no poop between [from] and [to]. */
+    fun longestPoopGap(dates: Collection<LocalDate>, from: LocalDate, to: LocalDate): Int {
+        val pts = listOf(from.minusDays(1)) + dates.filter { !it.isBefore(from) && !it.isAfter(to) }.sorted() + listOf(to.plusDays(1))
+        return pts.zipWithNext { a, b -> (java.time.temporal.ChronoUnit.DAYS.between(a, b) - 1).toInt() }.max()
+    }
+
+    /** Bristol stool type 1-7 in words: 1-2 hard, 3-4 normal, 5-7 soft to watery. */
+    val STOOL_LABELS = listOf("1 Hard lumps", "2 Lumpy log", "3 Cracked log", "4 Smooth log", "5 Soft blobs", "6 Mushy", "7 Watery")
+
     // The Portal runs Android 9/10, whose emoji font predates these; they draw as an empty box.
     private val ICON_FALLBACK = mapOf("🫧" to "🧼", "🪴" to "🌱")
 
     /** An icon the Portal can draw: newer emoji are swapped for an older look-alike. */
     fun safeIcon(icon: String): String = ICON_FALLBACK[icon] ?: icon
 
-    /** Chore points reset every Friday: the week runs Friday through Thursday. */
+    /** First day of the points week (Friday unless the family changed it). Set from [ConfigStore]. */
+    @Volatile var weekStartDay: DayOfWeek = DayOfWeek.FRIDAY
+
+    /** Days the Reward Shop is open; empty means the last day of the week. Set from [ConfigStore]. */
+    @Volatile var shopDays: Set<DayOfWeek> = emptySet()
+
+    /** Chore points reset when each week starts. */
     fun pointsWeekStart(day: LocalDate): LocalDate =
-        day.with(TemporalAdjusters.previousOrSame(DayOfWeek.FRIDAY))
+        day.with(TemporalAdjusters.previousOrSame(weekStartDay))
+
+    fun dayName(d: DayOfWeek): String = d.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH)
+
+    private fun openDays(): Set<DayOfWeek> = shopDays.ifEmpty { setOf(weekStartDay.minus(1)) }
+
+    /** "Thursday", "Monday and Friday", or "every day". */
+    fun shopDaysText(): String = openDays().let { d ->
+        if (d.size == 7) "every day" else d.sorted().joinToString(" and ") { dayName(it) }
+    }
 
     /**
      * Consecutive dry days ending today. A not-yet-marked today doesn't break the
@@ -131,7 +178,7 @@ object Rules {
     const val REWARDS_TAB = 7
 
     /** What each tab card says, in [TAB_KEYS] order. */
-    val TAB_LABELS = listOf("📅 Calendar", "✅ Chores", "📝 Lists", "🍽️ Meals", "⏰ Get Ready", "🚽 Pee Tracker", "🛒 Shopping", "💰 Reward Shop 💰")
+    val TAB_LABELS = listOf("📅 Calendar", "✅ Chores", "📝 Lists", "🍽️ Meals", "⏰ Get Ready", "🚽 Potty Tracker", "🛒 Shopping", "💰 Reward Shop 💰")
 
     /** A saved tab order made safe: unknown names dropped, repeats removed, anything missing added at the end. */
     fun normalizeTabOrder(saved: List<String>): List<String> {
