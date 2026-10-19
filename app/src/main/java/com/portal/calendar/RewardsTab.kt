@@ -80,13 +80,13 @@ class RewardsTab(
         }
         view.addView(HorizontalScrollView(ctx).apply { isHorizontalScrollBarEnabled = false; addView(chips) }, lp(bottom = dp(6)))
         view.addView(TextView(ctx).apply {
-            text = "💰 ${me.getString("name")} has ⭐ $left to spend this week · stars reset every Friday"
+            text = "💰 ${me.getString("name")} has ⭐ $left to spend this week · stars reset every ${Rules.dayName(Rules.weekStartDay)}"
             textSize = 15f
             setTextColor(INK)
         }, lp(bottom = dp(12)))
 
         val open = Rules.shopOpen(java.time.LocalDate.now())
-        if (!open) view.addView(note("🔒 The shop opens on Thursday, the last day of the week.\nKeep earning!"), lp(bottom = dp(12)))
+        if (!open) view.addView(note("🔒 The shop opens on ${Rules.shopDaysText()}.\nKeep earning!"), lp(bottom = dp(12)))
         if (rewards.length() == 0) {
             view.addView(note("No rewards yet.\nAdd some from your phone: Chores → Rewards."))
             return

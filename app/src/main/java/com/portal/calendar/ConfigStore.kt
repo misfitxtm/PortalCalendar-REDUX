@@ -1,6 +1,7 @@
 package com.portal.calendar
 
 import android.content.Context
+import java.time.DayOfWeek
 import android.graphics.Color
 import org.json.JSONArray
 import org.json.JSONObject
@@ -17,6 +18,8 @@ val CELEBRATE_KINDS = setOf("potty", "routines", "penalty")
 /** Feed list persisted as a JSON array in SharedPreferences. */
 class ConfigStore(ctx: Context) {
     private val prefs = ctx.getSharedPreferences("config", Context.MODE_PRIVATE)
+
+    init { applyWeek() }
 
     fun feedsJson(): String = prefs.getString(KEY, "[]")!!
 
@@ -69,6 +72,23 @@ class ConfigStore(ctx: Context) {
      */
     fun featureEnabled(key: String, default: Boolean = true): Boolean =
         prefs.getBoolean("feature_$key", default)
+
+    /** First day of the points week, 1=Monday … 7=Sunday (java.time); Friday by default. */
+    fun pointsWeekStart(): Int = prefs.getInt("points_week_start", DayOfWeek.FRIDAY.value).coerceIn(1, 7)
+
+    /** Reward Shop open days (1=Monday … 7=Sunday); empty means the last day of the week. */
+    fun shopDays(): Set<Int> = prefs.getString("shop_days", "")!!.split(',').mapNotNull { it.toIntOrNull() }.filter { it in 1..7 }.toSet()
+
+    fun setPointsWeek(start: Int, shop: Set<Int>) {
+        require(start in 1..7 && shop.all { it in 1..7 }) { "pick days between Monday and Sunday" }
+        prefs.edit().putInt("points_week_start", start).putString("shop_days", shop.sorted().joinToString(",")).commit()
+        applyWeek()
+    }
+
+    private fun applyWeek() {
+        Rules.weekStartDay = DayOfWeek.of(pointsWeekStart())
+        Rules.shopDays = shopDays().map { DayOfWeek.of(it) }.toSet()
+    }
 
     fun setFeature(key: String, on: Boolean) {
         prefs.edit().putBoolean("feature_$key", on).commit()
@@ -143,6 +163,14 @@ class ConfigStore(ctx: Context) {
         prefs.edit().putString("potty_kids", JSONArray(ids.toList()).toString()).commit()
     }
 
+    /** Hours between "bathroom time" chimes on the board (8am-7pm); 0 = off. */
+    fun pottyChimeHours(): Int = prefs.getInt("potty_chime_hours", 0).takeIf { it in setOf(0, 2, 3, 4) } ?: 0
+
+    fun setPottyChimeHours(hours: Int) {
+        require(hours in setOf(0, 2, 3, 4)) { "chime every 2, 3 or 4 hours, or off" }
+        prefs.edit().putInt("potty_chime_hours", hours).commit()
+    }
+
     /** Celebration animations when a chore is checked off (on by default). */
     fun choreEffects(): Boolean = prefs.getBoolean("chore_effects", true)
 
@@ -150,7 +178,7 @@ class ConfigStore(ctx: Context) {
         prefs.edit().putBoolean("chore_effects", on).commit()
     }
 
-    /** Full-screen reactions: celebrations for the Pee Tracker ("potty") and Get Ready ("routines"), and the "penalty" screen when points are deducted; all on by default. */
+    /** Full-screen reactions: celebrations for the Potty Tracker ("potty") and Get Ready ("routines"), and the "penalty" screen when points are deducted; all on by default. */
     fun celebrate(kind: String): Boolean = prefs.getBoolean("celebrate_$kind", true)
 
     fun setCelebrate(kind: String, on: Boolean) {

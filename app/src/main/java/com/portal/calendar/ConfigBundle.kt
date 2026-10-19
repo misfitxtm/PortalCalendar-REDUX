@@ -27,7 +27,7 @@ object ConfigBundle {
     private val DATA_FILES = listOf(
         "members.json", "lists.json", "chores.json", "chore_done.json",
         "star_goals.json", "chore_history.json", "mealplan.json",
-        "recipes.json", "magic_done.json", "routines.json", "routine_done.json", "chore_points.json", "potty_log.json", "shopping.json", "chore_rewards.json", "chore_profiles.json", "potty_bonus.json")
+        "recipes.json", "magic_done.json", "routines.json", "routine_done.json", "chore_points.json", "potty_log.json", "shopping.json", "chore_rewards.json", "chore_profiles.json", "potty_bonus.json", "potty_poop.json", "potty_effort.json")
 
     /** Passphrase-encrypted backup for the user to keep or clone with. */
     fun export(ctx: Context, passphrase: String): String =

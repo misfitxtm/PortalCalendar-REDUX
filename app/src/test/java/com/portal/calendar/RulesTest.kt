@@ -20,6 +20,28 @@ class RulesTest {
         assertEquals(false, Rules.shopOpen(d("2026-10-18"))) // Sun
     }
 
+    @Test fun weekStartAndShopDaysAreConfigurable() {
+        try {
+            Rules.weekStartDay = java.time.DayOfWeek.MONDAY
+            Rules.shopDays = emptySet()
+            assertEquals(d("2026-10-12"), Rules.pointsWeekStart(d("2026-10-18"))) // Sun belongs to the Monday week
+            assertEquals(true, Rules.shopOpen(d("2026-10-18"))) // default: last day of the week
+            assertEquals(false, Rules.shopOpen(d("2026-10-17")))
+            Rules.shopDays = java.time.DayOfWeek.values().toSet()
+            assertEquals("every day", Rules.shopDaysText())
+        } finally { Rules.weekStartDay = java.time.DayOfWeek.FRIDAY; Rules.shopDays = emptySet() }
+    }
+
+    @Test fun poopGapsAndHabitBonus() {
+        val dates = listOf(d("2026-10-10"), d("2026-10-11"), d("2026-10-15"))
+        assertEquals(3, Rules.daysSincePoop(dates, d("2026-10-18")))
+        assertEquals(null, Rules.daysSincePoop(emptyList(), d("2026-10-18")))
+        assertEquals(3, Rules.longestPoopGap(dates, d("2026-10-10"), d("2026-10-18"))) // 12th-14th, and 16th-18th
+        assertEquals(5, Rules.longestPoopGap(emptyList(), d("2026-10-14"), d("2026-10-18")))
+        assertEquals(false, Rules.effortBonus(2))
+        assertEquals(true, Rules.effortBonus(3))
+    }
+
     @Test fun alternatingWeeksFlipEveryFriday() {
         assertEquals(Rules.weekSlot(d("2026-10-09")), Rules.weekSlot(d("2026-10-15"))) // Fri..Thu same slot
         assertEquals(false, Rules.weekSlot(d("2026-10-15")) == Rules.weekSlot(d("2026-10-16")))
@@ -101,7 +123,7 @@ class RulesTest {
     @Test fun everyTabHasAnEmojiLabel() {
         assertEquals(Rules.TAB_KEYS.size, Rules.TAB_LABELS.size)
         assertEquals("💰 Reward Shop 💰", Rules.TAB_LABELS[Rules.TAB_KEYS.indexOf("rewards")])
-        assertEquals("🚽 Pee Tracker", Rules.TAB_LABELS[Rules.TAB_KEYS.indexOf("potty")])
+        assertEquals("🚽 Potty Tracker", Rules.TAB_LABELS[Rules.TAB_KEYS.indexOf("potty")])
     }
 
     @Test fun startTabFollowsTheChosenOrder() {

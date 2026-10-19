@@ -7,6 +7,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import org.json.JSONObject
 import java.time.DayOfWeek
@@ -24,6 +25,8 @@ import kotlin.math.roundToInt
 class PottyTab(
     private val ctx: Context,
     /** Fired when a recent day is marked dry; [milestone] when that reached 3, 7, 14 or 21 days. */
+    /** Shows a view over the whole screen; null hides it again. */
+    private val onOverlay: (android.view.View?) -> Unit = {},
     private val onCelebrate: (name: String, streak: Int, milestone: Boolean) -> Unit = { _, _, _ -> },
     /** Asks "are you sure?" (and the parent PIN) before something drastic; runs [action] if confirmed. */
     private val onConfirm: (title: String, message: String, button: String, action: () -> Unit) -> Unit = { _, _, _, a -> a() },
@@ -31,6 +34,12 @@ class PottyTab(
 ) {
     private var selected = ""
     private var month: YearMonth = YearMonth.now()
+    private var showSummary = false
+    private var poopOpen = false
+    private var pStool = 0
+    private var pPain = false
+    private var pLeak = false
+    private var pSoiled = false
     val view: LinearLayout = LinearLayout(ctx).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(22), dp(18), dp(22), dp(16))
@@ -45,21 +54,31 @@ class PottyTab(
         val goal = status.getInt("goal")
         val today = LocalDate.parse(status.getString("today"))
 
-        view.addView(TextView(ctx).apply {
-            text = "🚽 PEE TRACKER"
+        val titleRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        titleRow.addView(TextView(ctx).apply {
+            text = "🚽 POTTY TRACKER"
             textSize = 13f
             setTextColor(ACCENT)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             letterSpacing = 0.14f
-        }, lp(bottom = dp(10)))
+        }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        titleRow.addView(TextView(ctx).apply {
+            text = if (showSummary) "📅 Calendar" else "📊 Summary"
+            textSize = 14f
+            setTextColor(INK)
+            background = rounded(PILL, 16)
+            setPadding(dp(14), dp(7), dp(14), dp(7))
+            setOnClickListener { showSummary = !showSummary; render() }
+        })
+        view.addView(titleRow, lp(bottom = dp(10)))
 
         if (members.length() == 0) {
-            view.addView(note("Nobody is set up for the pee tracker.\nPick who uses it on your phone: Settings → Board tabs."))
+            view.addView(note("Nobody is set up for the potty tracker.\nPick who uses it on your phone: Settings → Board tabs."))
             return
         }
         val list = (0 until members.length()).map { members.getJSONObject(it) }.filter { Members.onSchedule(ctx, it.getString("id")) }
         if (list.isEmpty()) {
-            view.addView(note("Nobody on the pee tracker is at this house this week."))
+            view.addView(note("Nobody on the potty tracker is at this house this week."))
             return
         }
         val me = list.find { it.getString("id") == selected } ?: list.first().also { selected = it.getString("id") }
@@ -86,10 +105,13 @@ class PottyTab(
             orientation = if (portrait) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
         }
         view.addView(body, LinearLayout.LayoutParams(MATCH, 0, 1f))
-        body.addView(streakCard(me, color, goal, today),
-            if (portrait) LinearLayout.LayoutParams(MATCH, WRAP).apply { bottomMargin = dp(10) }
+        val left = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        left.addView(todayCard(me, today), lp(bottom = dp(10))) // the picture card first: a child can reach it without scrolling
+        left.addView(streakCard(me, color, goal, today), lp())
+        body.addView(ScrollView(ctx).apply { isVerticalScrollBarEnabled = false; addView(left) },
+            if (portrait) LinearLayout.LayoutParams(MATCH, 0, 1f).apply { bottomMargin = dp(10) }
             else LinearLayout.LayoutParams(0, MATCH, 1f).apply { rightMargin = dp(10) })
-        body.addView(calendarCard(me, today),
+        body.addView(if (showSummary) summaryCard(me) else calendarCard(me, today),
             if (portrait) LinearLayout.LayoutParams(MATCH, 0, 1f)
             else LinearLayout.LayoutParams(0, MATCH, 2f))
     }
@@ -151,9 +173,9 @@ class PottyTab(
         }, lp(bottom = dp(16)))
 
         val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
-        row.addView(action("☀️ Dry today", DRY) { mark(me, today, "dry") },
+        row.addView(action("🌙 Dry night", DRY) { mark(me, today, "dry") },
             LinearLayout.LayoutParams(0, WRAP, 1f).apply { rightMargin = dp(6) })
-        row.addView(action("💧 Wet today", WET) { mark(me, today, "wet") },
+        row.addView(action("💧 Wet night", WET) { mark(me, today, "wet") },
             LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(6) })
         card.addView(row, lp())
         // Drastic, so it asks first: resets the streak, this week's marks and this week's points.
@@ -177,6 +199,7 @@ class PottyTab(
 
     private fun calendarCard(me: JSONObject, today: LocalDate): LinearLayout {
         val days = me.getJSONObject("days")
+        val poopDays = me.getJSONArray("poop").let { a -> (0 until a.length()).map { a.getJSONObject(it).getString("date") }.toSet() }
         val awakeDays = me.getJSONArray("awake").let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }
         val card = card()
         val nav = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -222,8 +245,9 @@ class PottyTab(
                     val state = if (days.has(date.toString())) days.getBoolean(date.toString()) else null
                     val oops = awakeDays.contains(date.toString())
                     val future = date.isAfter(today)
-                    cell.text = if (oops) "😠" else when (state) { true -> "✓"; false -> "💧"; null -> "$dayNum" }
-                    cell.textSize = 17f
+                    cell.text = (if (oops) "😠" else when (state) { true -> "✓"; false -> "💧"; null -> "$dayNum" }) +
+                        if (date.toString() in poopDays) "\n💩" else ""
+                    cell.textSize = if (date.toString() in poopDays) 13f else 17f
                     cell.setTextColor(if (state != null) Color.WHITE else if (future) MUTED else INK)
                     cell.background = GradientDrawable().apply {
                         cornerRadius = dp(10).toFloat()
@@ -240,7 +264,7 @@ class PottyTab(
             card.addView(line, LinearLayout.LayoutParams(MATCH, 0, 1f))
         }
         card.addView(TextView(ctx).apply {
-            text = "Tap a day to mark it: dry ✓ → wet 💧 → clear.  😠 = accident while awake"
+            text = "Tap a day to mark it: dry ✓ → wet 💧 → clear.  😠 = accident while awake  💩 = went poop"
             textSize = 12f
             setTextColor(MUTED)
             gravity = Gravity.CENTER
@@ -251,6 +275,186 @@ class PottyTab(
     private fun mark(me: JSONObject, date: LocalDate, state: String) = onGate { markNow(me, date, state) }
 
     /** Applies a mark; the caller has already cleared the PIN (and any confirmation). */
+    private fun poopSave(me: JSONObject, date: LocalDate, state: String) {
+        runCatching {
+            Potty.mutate(ctx, JSONObject().put("action", "poop").put("memberId", me.getString("id"))
+                .put("date", date.toString()).put("state", state).put("stool", pStool)
+                .put("pain", pPain).put("leak", pLeak).put("soiled", pSoiled))
+        }
+    }
+
+    private fun poop(me: JSONObject, date: LocalDate, state: String) = onGate {
+        poopSave(me, date, state)
+        poopOpen = false
+        render()
+    }
+
+    /** First tap of the day: the poop is marked at once, then a full-screen chart asks what it looked like. */
+    private fun markPoopAndAsk(me: JSONObject, today: LocalDate) = onGate {
+        pStool = 0; pPain = false; pLeak = false; pSoiled = false
+        poopSave(me, today, "yes")
+        render()
+        showChart(me, today)
+    }
+
+    private fun showChart(me: JSONObject, today: LocalDate) {
+        val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(28), dp(18), dp(28), dp(18)) }
+        val top = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        top.addView(TextView(ctx).apply { text = "💩 ➜ 🤔"; textSize = 38f; gravity = Gravity.CENTER }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        top.addView(TextView(ctx).apply {
+            text = "✖"
+            textSize = 26f
+            setTextColor(MUTED)
+            gravity = Gravity.CENTER
+            minimumWidth = dp(56); minimumHeight = dp(56)
+            setOnClickListener { onOverlay(null) } // closes without details; the poop stays marked
+        })
+        col.addView(top, lp(bottom = dp(8)))
+        fun margins() = LinearLayout.LayoutParams(0, MATCH, 1f).apply { setMargins(dp(5), dp(5), dp(5), dp(5)) }
+        for ((range, weight) in listOf(0..3 to 3f, 4..6 to 3f)) {
+            val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+            for (i in range) row.addView(tile(null, Rules.STOOL_NAMES[i], pStool == i + 1,
+                when (i) { 0, 1 -> HARD; 2, 3 -> DRY; else -> WET }, StoolIcon(ctx, i + 1), scale = 1.9f) { pStool = i + 1; showChart(me, today) }, margins())
+            col.addView(row, LinearLayout.LayoutParams(MATCH, 0, weight))
+        }
+        val flags = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        flags.addView(tile("😣", "Ouch", pPain, OOPS, scale = 1.4f) { pPain = !pPain; showChart(me, today) }, margins())
+        flags.addView(tile("💦", "Leak", pLeak, OOPS, scale = 1.4f) { pLeak = !pLeak; showChart(me, today) }, margins())
+        flags.addView(tile("👖", "In pants", pSoiled, OOPS, scale = 1.4f) { pSoiled = !pSoiled; showChart(me, today) }, margins())
+        col.addView(flags, LinearLayout.LayoutParams(MATCH, 0, 2f))
+        col.addView(action("✅ Done", DRY) {
+            poopSave(me, today, "yes")
+            onOverlay(null)
+            render()
+        }.apply { textSize = 24f; minimumHeight = dp(64) }, lp(top = dp(8)))
+        onOverlay(col)
+    }
+
+    private fun effort(me: JSONObject, item: String, on: Boolean) = onGate {
+        runCatching {
+            Potty.mutate(ctx, JSONObject().put("action", "effort").put("memberId", me.getString("id"))
+                .put("item", item).put("state", if (on) "yes" else "clear"))
+        }
+        render()
+    }
+
+    private fun todayCard(me: JSONObject, today: LocalDate): LinearLayout {
+        val card = card()
+        card.addView(TextView(ctx).apply {
+            text = "⭐ Today"
+            textSize = 20f
+            setTextColor(INK)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        }, lp())
+        val done = me.getJSONArray("effort").let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }
+        card.addView(TextView(ctx).apply {
+            text = "⭐".repeat(minOf(done.size, Rules.EFFORT_BONUS_NEEDED)) + "☆".repeat(maxOf(Rules.EFFORT_BONUS_NEEDED - done.size, 0)) +
+                "   (${Rules.EFFORT_BONUS_NEEDED} habits = ⭐ +1)"
+            textSize = 20f
+            setTextColor(MUTED)
+        }, lp(bottom = dp(8)))
+        // Big picture tiles, two across: a 6-year-old can tap them without reading.
+        for (rowStart in Rules.EFFORT_ITEMS.indices step 2) {
+            val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+            for (i in rowStart until minOf(rowStart + 2, Rules.EFFORT_ITEMS.size)) {
+                val key = Rules.EFFORT_ITEMS[i]
+                val on = key in done
+                row.addView(tile(Rules.EFFORT_PICTURES[i], Rules.EFFORT_SHORT[i], on, DRY) { effort(me, key, !on) },
+                    LinearLayout.LayoutParams(0, WRAP, 1f).apply { setMargins(dp(3), dp(3), dp(3), dp(3)) })
+            }
+            card.addView(row, lp())
+        }
+
+        // Poop: a heads-up when it has been a while, then today's entry.
+        val since = if (me.isNull("daysSincePoop")) null else me.getInt("daysSincePoop")
+        val entry = me.getJSONArray("poop").let { a -> (0 until a.length()).map { a.getJSONObject(it) }.firstOrNull { it.getString("date") == today.toString() } }
+        if (since != null && since >= Rules.NO_POOP_ALERT_DAYS) card.addView(TextView(ctx).apply {
+            text = "⚠️ No poop in $since days. Water, fiber and a sit after meals help; call the doctor if it hurts or goes on."
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            background = rounded(OOPS, 12)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+        }, lp(top = dp(6), bottom = dp(6)))
+        else if (since != null) card.addView(TextView(ctx).apply {
+            text = "Last poop: " + when (since) { 0 -> "today"; 1 -> "yesterday"; else -> "$since days ago" }
+            textSize = 12f
+            setTextColor(MUTED)
+        }, lp(top = dp(6), bottom = dp(2)))
+        card.addView(action(if (entry != null) "💩 Pooped today ✓" else "💩 Pooped today?", POOP) {
+            if (entry == null) markPoopAndAsk(me, today)
+            else {
+                poopOpen = !poopOpen
+                if (poopOpen) {
+                    pStool = entry.optInt("stool"); pPain = entry.optBoolean("pain")
+                    pLeak = entry.optBoolean("leak"); pSoiled = entry.optBoolean("soiled")
+                }
+                render()
+            }
+        }, lp(top = dp(4)))
+        if (poopOpen) {
+            card.addView(TextView(ctx).apply { text = "💩 ➜ 🤔"; textSize = 26f; gravity = Gravity.CENTER }, lp(top = dp(8), bottom = dp(2)))
+            for (rowStart in listOf(0, 4)) {
+                val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+                for (i in rowStart until minOf(rowStart + 4, 7)) {
+                    // Orange = hard, green = just right (🍌), blue = soft or runny.
+                    val tone = when (i) { 0, 1 -> HARD; 2, 3 -> DRY; else -> WET }
+                    row.addView(tile(null, Rules.STOOL_NAMES[i], pStool == i + 1, tone, StoolIcon(ctx, i + 1)) { pStool = i + 1; render() },
+                        LinearLayout.LayoutParams(0, WRAP, 1f).apply { setMargins(dp(3), dp(3), dp(3), dp(3)) })
+                }
+                card.addView(row, lp())
+            }
+            val flags = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+            flags.addView(tile("😣", "Ouch", pPain, OOPS) { pPain = !pPain; render() }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { setMargins(dp(3), dp(3), dp(3), dp(3)) })
+            flags.addView(tile("💦", "Leak", pLeak, OOPS) { pLeak = !pLeak; render() }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { setMargins(dp(3), dp(3), dp(3), dp(3)) })
+            flags.addView(tile("👖", "In pants", pSoiled, OOPS) { pSoiled = !pSoiled; render() }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { setMargins(dp(3), dp(3), dp(3), dp(3)) })
+            card.addView(flags, lp())
+            val btns = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+            btns.addView(action("✅ Done", DRY) { poop(me, today, "yes") }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { rightMargin = dp(6) })
+            if (entry != null) btns.addView(action("✖️ Undo", WET) { poop(me, today, "clear") }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(6) })
+            card.addView(btns, lp(top = dp(8)))
+        }
+        return card
+    }
+
+    /** A big tappable picture with a tiny caption; filled with [tone] when chosen. */
+    private fun tile(picture: String?, caption: String, on: Boolean, tone: Int, icon: android.view.View? = null, scale: Float = 1f, onClick: () -> Unit) = LinearLayout(ctx).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        background = if (on) rounded(tone, 16) else GradientDrawable().apply { cornerRadius = dp(16).toFloat(); setColor(PILL); setStroke(dp(2), tone) }
+        minimumHeight = dp((78 * scale).toInt())
+        setPadding(dp(4), dp(8), dp(4), dp(6))
+        if (icon != null) addView(icon, LinearLayout.LayoutParams(dp((64 * scale).toInt()), dp((40 * scale).toInt())))
+        else addView(TextView(ctx).apply { text = picture + if (on) "✔" else ""; textSize = 30f * scale; gravity = Gravity.CENTER })
+        addView(TextView(ctx).apply { text = caption; textSize = 12f * scale; setTextColor(if (on) Color.WHITE else INK); gravity = Gravity.CENTER; maxLines = 1 })
+        setOnClickListener { onClick() }
+    }
+
+    private fun summaryCard(me: JSONObject): LinearLayout {
+        val s = me.getJSONObject("summary")
+        val card = card()
+        card.addView(TextView(ctx).apply {
+            text = "📊 Last ${s.getInt("days")} days · ${me.getString("name")}"
+            textSize = 19f
+            setTextColor(INK)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        }, lp(bottom = dp(10)))
+        val avg = if (s.isNull("avgStool")) "none logged" else "${s.getDouble("avgStool")} (hard ${s.getInt("hard")} · loose ${s.getInt("loose")})"
+        val lines = listOf(
+            "🌙 Nights: ${s.getInt("nightsDry")} dry · ${s.getInt("nightsWet")} wet",
+            "😠 Accidents while awake: ${s.getInt("dayAccidents")}",
+            "💩 Days with a poop: ${s.getInt("poopDays")} · longest gap ${s.getInt("longestNoPoop")} days",
+            "Stool type (1-7, 4 is ideal): $avg",
+            "😣 Painful: ${s.getInt("painful")} · 💦 Leaks: ${s.getInt("leaks")} · 🩲 Soiled: ${s.getInt("soiled")}",
+            "✅ Days with ${Rules.EFFORT_BONUS_NEEDED}+ habits ticked: ${s.getInt("habitDays")}")
+        for (l in lines) card.addView(TextView(ctx).apply { text = l; textSize = 16f; setTextColor(INK) }, lp(bottom = dp(8)))
+        card.addView(TextView(ctx).apply {
+            text = "Only what has been logged. Bring this to the pediatrician; the setup page can print it."
+            textSize = 12f
+            setTextColor(MUTED)
+        }, lp(top = dp(4)))
+        return card
+    }
+
     private fun markNow(me: JSONObject, date: LocalDate, state: String) {
         val before = me.getInt("streak")
         runCatching {
@@ -302,6 +506,8 @@ class PottyTab(
         private val DRY = Color.parseColor("#2BB3A3")
         private val WET = Color.parseColor("#4FA3E3")
         private val OOPS = Color.parseColor("#D9453D")
+        private val POOP = Color.parseColor("#8D6E63")
+        private val HARD = Color.parseColor("#E8943A")
         private val CARD get() = Palette.CARD
         private val PILL get() = Palette.PILL
         private val INK get() = Palette.INK

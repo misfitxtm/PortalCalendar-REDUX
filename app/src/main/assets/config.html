@@ -141,6 +141,7 @@
   ol { padding-left: 20px; color: var(--ink2); font-size: 14px; }
   ol li { margin-bottom: 8px; }
   .empty { color: var(--muted); text-align: center; padding: 12px 0; }
+  @media print { #tabbar, #pageHead, #themeBtn, .card:not(#pottySummary), button { display: none !important; } #pottySummary { display: block !important; box-shadow: none; } body { margin: 0; } }
   code { background: var(--line); border-radius: 5px; padding: 1px 6px; font-size: 13px; }
   a { color: var(--accent); }
 </style>
@@ -165,7 +166,7 @@
     <button data-tabbtn="lists" class="ghost" onclick="showTab('lists')"><span class="ti">📝</span><span>Lists</span></button>
     <button data-tabbtn="meals" class="ghost" onclick="showTab('meals')"><span class="ti">🍽️</span><span>Meals</span></button>
     <button data-tabbtn="routines" class="ghost" onclick="showTab('routines')"><span class="ti">⏰</span><span>Get Ready</span></button>
-    <button data-tabbtn="potty" class="ghost" onclick="showTab('potty')"><span class="ti">🚽</span><span>Pee Tracker</span></button>
+    <button data-tabbtn="potty" class="ghost" onclick="showTab('potty')"><span class="ti">🚽</span><span>Potty Tracker</span></button>
     <button data-tabbtn="shopping" class="ghost" onclick="showTab('shopping')"><span class="ti">🛒</span><span>Shopping</span></button>
     <button data-tabbtn="rewards" class="ghost" onclick="showTab('rewards')"><span class="ti">💰</span><span>Reward Shop</span></button>
     <button data-tabbtn="family" class="ghost" onclick="showTab('family')"><span class="ti">👨‍👩‍👧</span><span>Family</span></button>
@@ -175,7 +176,7 @@
 
   <div class="card" data-tab="chores">
     <strong>⭐ Points this week</strong>
-    <div style="font-size:13px;color:var(--muted);margin-top:4px;">Resets every Friday. Add a bonus or take points away; the reason is optional.</div>
+    <div style="font-size:13px;color:var(--muted);margin-top:4px;">Resets when each week starts. Add a bonus or take points away; the reason is optional.</div>
     <input type="text" id="ptReason" placeholder="Reason, e.g. Great job / Got in trouble" maxlength="60" autocomplete="off" style="margin:8px 0 0;">
     <div id="starBox" style="margin-top:8px;"></div>
     <div id="ptHistory"></div>
@@ -346,7 +347,15 @@
 
   <div class="card" data-tab="potty">
     <div id="pottyKidsBox"></div>
+    <div id="pottyOpts" style="margin-top:14px;"></div>
     <div id="pottyMsg" class="msgline"></div>
+  </div>
+
+  <div class="card" data-tab="potty" id="pottySummary">
+    <strong>📊 Last 28 days</strong>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">What has been logged for each kid, for you or the pediatrician.</div>
+    <div id="pottySummaryBox"></div>
+    <button class="ghost" style="width:100%;margin-top:8px;" onclick="window.print()">🖨️ Print</button>
   </div>
 
   <div class="card" data-tab="meals" id="aiMealCard" style="display:none;">
@@ -477,6 +486,17 @@
     <div class="btnrow">
       <button onclick="addCal()">Add calendar</button>
     </div>
+  </div>
+
+  <div class="card" data-tab="settings">
+    <strong>🗓️ Week &amp; Reward Shop</strong>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Stars reset and A/B weeks flip when a new week starts. The Reward Shop only opens on the days you tick (none ticked: the last day of the week).</div>
+    <label for="pointsWeekStart">Chore &amp; stars week starts on</label>
+    <select id="pointsWeekStart"></select>
+    <label>Reward Shop is open on</label>
+    <div id="shopDays" style="display:flex;flex-wrap:wrap;gap:6px 14px;margin:6px 0 12px;"></div>
+    <button style="width:100%;" onclick="saveWeek()">Save</button>
+    <div id="weekMsg" class="msgline"></div>
   </div>
 
   <div class="card" data-tab="settings">
@@ -727,7 +747,7 @@
     <p style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Reset just part of the hub. Everything else stays. This cannot be undone.</p>
     <label class="switchrow" style="display:flex;align-items:center;gap:10px;font-size:15px;color:var(--ink);"><input type="checkbox" class="freshChk" value="points" style="width:22px;height:22px;flex:none;"><span>⭐ This week's points <span style="color:var(--muted);font-size:13px;">(bonuses, penalties, spending; checked chores stay)</span></span></label>
     <label class="switchrow" style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:15px;color:var(--ink);"><input type="checkbox" class="freshChk" value="chores" style="width:22px;height:22px;flex:none;"><span>✅ Chores <span style="color:var(--muted);font-size:13px;">(all chores and their history)</span></span></label>
-    <label class="switchrow" style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:15px;color:var(--ink);"><input type="checkbox" class="freshChk" value="potty" style="width:22px;height:22px;flex:none;"><span>🚽 Pee Tracker <span style="color:var(--muted);font-size:13px;">(marks, streaks, bonuses)</span></span></label>
+    <label class="switchrow" style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:15px;color:var(--ink);"><input type="checkbox" class="freshChk" value="potty" style="width:22px;height:22px;flex:none;"><span>🚽 Potty Tracker <span style="color:var(--muted);font-size:13px;">(marks, streaks, bonuses)</span></span></label>
     <label class="switchrow" style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:15px;color:var(--ink);"><input type="checkbox" class="freshChk" value="routines" style="width:22px;height:22px;flex:none;"><span>⏰ Get Ready lists <span style="color:var(--muted);font-size:13px;">(all items and their history)</span></span></label>
     <input type="text" id="freshWord" placeholder="Type RESET to enable" autocomplete="off" style="margin-top:12px;">
     <button style="width:100%;background:var(--err);" onclick="startFresh()">Reset the ticked parts</button>
@@ -965,7 +985,7 @@ async function saveSaver(){
 }
 
 const TAB_LABELS = {calendar:'Calendar', chores:'Chores & stars', lists:'Lists', meals:'Meals',
-  routines:'Get Ready (kids\' routine checklists, follows the time of day)', potty:'🚽 Pee Tracker (dry-night streak toward 3 weeks)',
+  routines:'Get Ready (kids\' routine checklists, follows the time of day)', potty:'🚽 Potty Tracker (dry-night streak toward 3 weeks)',
   shopping:'Shopping list (parent-locked on the board)',
   rewards:'💰 Reward Shop 💰 (kids pick prizes with their points)'};
 
@@ -1019,6 +1039,29 @@ async function saveVoice(){
   } catch(e){ show('voiceMsg', e.message, false); loadVoice(); }
 }
 
+const DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+let weekCfg = null;
+async function loadWeek(){
+  try {
+    weekCfg = await (await fetch('/api/week')).json();
+    document.getElementById('pointsWeekStart').innerHTML = DAY_NAMES.map((n,i) => `<option value="${i+1}"${weekCfg.pointsWeekStart===i+1?' selected':''}>${n}</option>`).join('');
+    document.getElementById('shopDays').innerHTML = DAY_NAMES.map((n,i) =>
+      `<label style="display:flex;align-items:center;gap:6px;font-size:14px;color:var(--ink);"><input type="checkbox" class="shopDay" value="${i+1}"${weekCfg.shopDays.includes(i+1)?' checked':''} style="width:18px;height:18px;"> ${n.slice(0,3)}</label>`).join('');
+  } catch(e){ /* optional */ }
+}
+async function saveWeek(){
+  const start = parseInt(document.getElementById('pointsWeekStart').value);
+  const shop = [...document.querySelectorAll('.shopDay:checked')].map(c => parseInt(c.value));
+  if (weekCfg && start !== weekCfg.pointsWeekStart &&
+      !confirm('Change the first day of the week to ' + DAY_NAMES[start-1] + '?\n\nThis moves where "this week" begins, so stars, spending and the recap are counted from the new start day, and A/B weeks may swap. Best done right when a new week begins.')) return loadWeek();
+  try {
+    const r = await fetch('/api/week', {method:'POST', body: JSON.stringify({pointsWeekStart: start, shopDays: shop})});
+    const b = await r.json();
+    if (!r.ok) throw new Error(b.error || 'failed');
+    show('weekMsg', '✓ Saved', true); loadWeek();
+  } catch(e){ show('weekMsg', e.message, false); }
+}
+
 async function uploadPhotos(){
   const files = [...document.getElementById('photoFiles').files];
   if (!files.length) return show('photoMsg', 'Choose some photos first', false);
@@ -1036,11 +1079,40 @@ async function uploadPhotos(){
   document.getElementById('photoFiles').value = '';
 }
 
+function pottyAct(a){
+  return fetch('/api/potty', {method:'POST', body: JSON.stringify(a)}).then(async r => {
+    if (!r.ok) throw new Error((await r.json()).error || 'failed');
+  });
+}
+async function savePottyOpts(){
+  try {
+    await pottyAct({action:'setOptions', chimeHours: parseInt(document.getElementById('pottyChime').value)});
+    show('pottyMsg', 'Saved', true);
+  } catch(e){ show('pottyMsg', e.message, false); }
+}
+function renderPottySummary(st){
+  document.getElementById('pottySummaryBox').innerHTML = (st.members || []).map(m => { const s = m.summary; return `
+    <div style="margin-bottom:14px;">
+      <strong>${esc(m.name)}</strong>
+      <div style="font-size:14px;line-height:1.7;">
+        🌙 Nights: ${s.nightsDry} dry · ${s.nightsWet} wet<br>
+        😠 Accidents while awake: ${s.dayAccidents}<br>
+        💩 Days with a poop: ${s.poopDays} of ${s.days} · longest gap ${s.longestNoPoop} days · last poop ${m.daysSincePoop === null ? 'never logged' : m.daysSincePoop + ' days ago'}<br>
+        Stool type (1-7, 4 is ideal): ${s.avgStool === null ? 'none logged' : s.avgStool + ' (hard ' + s.hard + ' · loose ' + s.loose + ')'}<br>
+        😣 Painful: ${s.painful} · 💦 Leaks: ${s.leaks} · 🩲 Soiled: ${s.soiled}<br>
+        ✅ Days with 3+ habits ticked: ${s.habitDays}
+      </div></div>`; }).join('') || '<div class="empty">Nobody is on the Potty Tracker yet</div>';
+}
+
 async function loadPottyKids(){
   try {
     const st = await (await fetch('/api/potty')).json();
+    renderPottySummary(st);
+    document.getElementById('pottyOpts').innerHTML = `
+      <label for="pottyChime">"Bathroom time" chime on the Portal (8am to 7pm)</label>
+      <select id="pottyChime" onchange="savePottyOpts()">${[[0,'Off'],[2,'Every 2 hours'],[3,'Every 3 hours'],[4,'Every 4 hours']].map(([v,t]) => `<option value="${v}"${st.settings.chimeHours===v?' selected':''}>${t}</option>`).join('')}</select>`;
     const box = document.getElementById('pottyKidsBox');
-    box.innerHTML = '<strong style="font-size:14px;">🚽 Pee Tracker: who uses it?</strong>'
+    box.innerHTML = '<strong style="font-size:14px;">🚽 Potty Tracker: who uses it?</strong>'
       + '<div style="font-size:13px;color:var(--muted);margin:4px 0 6px;">Nobody is on the tracker until you tick them. Unticking someone removes them from the board but keeps their history.</div>'
       + (st.everyone || []).map(m => `<label style="display:flex;align-items:center;gap:10px;font-size:15px;margin:6px 0;">
           <input type="checkbox" data-id="${esc(m.id)}" ${m.enabled ? 'checked' : ''} onchange="savePottyKids()" style="width:20px;height:20px;flex:none;"> ${esc(m.name)}</label>`).join('');
@@ -1051,7 +1123,7 @@ async function savePottyKids(){
   try {
     const r = await fetch('/api/potty', {method:'POST', body: JSON.stringify({action:'setKids', memberIds: ids})});
     if (!r.ok) throw new Error((await r.json()).error || 'failed');
-    show('pottyMsg', 'Pee Tracker people updated', true);
+    show('pottyMsg', 'Potty Tracker people updated', true);
   } catch(e){ show('pottyMsg', e.message, false); loadPottyKids(); }
 }
 
@@ -1346,9 +1418,9 @@ const TAB_HEADS = {
   lists:['Lists','Shared to-do and packing lists.'],
   meals:['Meals','Plan the week and keep your recipes.'],
   routines:['Get Ready','Morning, afternoon and evening checklists.'],
-  potty:['Pee Tracker','Choose who uses the dry-streak tracker.'],
+  potty:['Potty Tracker','Choose who uses the dry-streak tracker.'],
   shopping:['Shopping','The household shopping list.'],
-  rewards:['Reward Shop','Prizes kids can spend their weekly stars on. Open Thursdays.'],
+  rewards:['Reward Shop','Prizes kids can spend their weekly stars on. Opens on the days you pick under Settings.'],
   family:['Family','Who lives here. Set which weeks each kid is at your house.'],
   settings:['Settings','Board tabs, look and feel, backup and sync.']};
 // Cards that are rarely touched start folded.
@@ -2075,7 +2147,7 @@ function renderMembers(){
              placeholder="${m.hasPin && typeof m.pin !== 'string' ? '••••' : 'PIN'}" maxlength="4" inputmode="numeric"
              autocomplete="off" style="margin:0;width:74px;" title="Optional: only this person (or a parent) can check off their chores. Leave as •••• to keep the current PIN."
              oninput="members[${i}].pin=this.value">
-      <select style="margin:0;width:auto;" title="Which weeks this person is at your house (weeks flip every Friday)" onchange="members[${i}].week=this.value">
+      <select style="margin:0;width:auto;" title="Which weeks this person is at your house (weeks flip when each week starts)" onchange="members[${i}].week=this.value">
         ${[['','Every week'],['A','A weeks'],['B','B weeks']].map(([v,t]) => `<option value="${v}"${(m.week||'')===v?' selected':''}>${t}</option>`).join('')}
       </select>
       ${m.hasPin ? `<button class="del" title="Remove PIN" style="font-size:11px;"
@@ -2615,7 +2687,7 @@ function showWizard(){
 async function exitWizard(){
   try { await fetch('/api/setup', {method:'POST', body:'{}'}); } catch(e){}
   document.getElementById('wizard').style.display = 'none';
-  load(); loadSaver(); loadEffects(); loadFeatures(); loadSync(); loadWriters(); loadScale(); loadWx(); loadPin();
+  load(); loadSaver(); loadEffects(); loadFeatures(); loadWeek(); loadSync(); loadWriters(); loadScale(); loadWx(); loadPin();
 }
 
 async function maybeStartWizard(){
@@ -2744,7 +2816,7 @@ async function loadLayout(){
 }
 const DEFAULT_TAB_ORDER = ['calendar','chores','lists','meals','routines','potty','shopping','rewards'];
 const TAB_SHORT = {calendar:'📅 Calendar', chores:'✅ Chores', lists:'📝 Lists', meals:'🍽️ Meals', routines:'⏰ Get Ready',
-  potty:'🚽 Pee Tracker', shopping:'🛒 Shopping', rewards:'💰 Reward Shop 💰'};
+  potty:'🚽 Potty Tracker', shopping:'🛒 Shopping', rewards:'💰 Reward Shop 💰'};
 let tabOrder = DEFAULT_TAB_ORDER.slice();
 function renderTabOrder(){
   document.getElementById('tabOrderBox').innerHTML = tabOrder.map((k, i) => `
@@ -2858,6 +2930,7 @@ async function importConfig(){
 loadSaver();
 loadEffects();
 loadFeatures();
+loadWeek();
 loadVoice();
 loadSync();
 loadWriters();

@@ -16,7 +16,7 @@ import java.util.UUID
  * append-only log of {choreId, date, memberId}; toggling today removes/adds
  * the entry. Points this week = each completion's stamped value (default 1)
  * plus manual parent adjustments (bonus / penalty), compared
- * against a per-member weekly goal. The week runs Friday through Thursday
+ * against a per-member weekly goal. The week starts on a chosen day, Friday by default
  * ([Rules.pointsWeekStart]). memberId and points are stamped at completion
  * time so a star survives its chore being pruned or deleted (older logs
  * without them fall back to looking the chore up / worth 1).
@@ -486,7 +486,7 @@ object Chores {
                         .firstOrNull { it.optString("id") == action.getString("rewardId") }
                 } ?: throw IllegalArgumentException("that reward no longer exists")
                 val cost = reward.optInt("cost")
-                if (!Rules.shopOpen(LocalDate.now())) throw IllegalArgumentException("the Reward Shop opens on Thursday")
+                if (!Rules.shopOpen(LocalDate.now())) throw IllegalArgumentException("the Reward Shop opens on ${Rules.shopDaysText()}")
                 // Check and spend under one lock so two taps can't overdraw.
                 synchronized(this) {
                     val (stars, spent, _) = weekTotals(ctx, Data.readArray(ctx, FILE), Data.readArray(ctx, DONE), weekStartStr())
