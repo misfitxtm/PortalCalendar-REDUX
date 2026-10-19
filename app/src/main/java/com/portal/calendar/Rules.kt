@@ -72,6 +72,16 @@ object Rules {
     fun inPointsWeek(date: LocalDate, today: LocalDate): Boolean =
         !date.isBefore(pointsWeekStart(today)) && !date.isAfter(today)
 
+    /** The Reward Shop opens only on Thursday, the last day of the Friday-to-Thursday week, so penalties land before spending. */
+    fun shopOpen(day: LocalDate) = day.dayOfWeek == DayOfWeek.THURSDAY
+
+    /** Which alternating week [day] falls in: "A" or "B", flipping every Friday. */
+    fun weekSlot(day: LocalDate): String =
+        if (java.time.temporal.ChronoUnit.WEEKS.between(LocalDate.of(2026, 1, 2), pointsWeekStart(day)) % 2 == 0L) "A" else "B"
+
+    /** Is a person on the board on [day]? [schedule] is "" (every week), "A" or "B". */
+    fun onSchedule(schedule: String, day: LocalDate) = schedule.isEmpty() || schedule == weekSlot(day)
+
     /** Small wins on the way to the 3-week goal; the last one is the goal itself. */
     val POTTY_MILESTONES = listOf(3, 7, 14, POTTY_GOAL_DAYS)
 

@@ -6,7 +6,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-data class Member(val id: String, val name: String, val color: Int)
+data class Member(val id: String, val name: String, val color: Int, val week: String = "")
 
 /**
  * The family members — the backbone that chores, stars, and color coding hang
@@ -40,9 +40,14 @@ object Members {
             Member(
                 o.optString("id").ifEmpty { return@mapNotNull null },
                 o.optString("name").ifEmpty { return@mapNotNull null },
-                parse(o.optString("color")))
+                parse(o.optString("color")),
+                o.optString("week"))
         }
     }
+
+    /** Is this person on the board today? Kids on A/B weeks only show on their weeks. */
+    fun onSchedule(ctx: Context, id: String): Boolean =
+        byId(ctx, id)?.let { Rules.onSchedule(it.week, java.time.LocalDate.now()) } ?: true
 
     fun byId(ctx: Context, id: String?): Member? = all(ctx).find { it.id == id }
 
@@ -66,6 +71,7 @@ object Members {
                 .put("id", o.optString("id"))
                 .put("name", o.optString("name"))
                 .put("color", o.optString("color"))
+                .put("week", o.optString("week"))
                 .put("hasPin", o.optString("pin").isNotEmpty()))
         }
         return out.toString()
@@ -103,6 +109,7 @@ object Members {
                     .put("id", id)
                     .put("name", name)
                     .put("color", o.optString("color"))
+                    .put("week", o.optString("week").takeIf { it == "A" || it == "B" } ?: "")
                     .put("pin", pin))
             }
             // Replace contents in place (Data.mutate writes the same array back).

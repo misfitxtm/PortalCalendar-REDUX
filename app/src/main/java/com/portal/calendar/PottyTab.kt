@@ -57,7 +57,11 @@ class PottyTab(
             view.addView(note("Nobody is set up for the pee tracker.\nPick who uses it on your phone: Settings → Board tabs."))
             return
         }
-        val list = (0 until members.length()).map { members.getJSONObject(it) }
+        val list = (0 until members.length()).map { members.getJSONObject(it) }.filter { Members.onSchedule(ctx, it.getString("id")) }
+        if (list.isEmpty()) {
+            view.addView(note("Nobody on the pee tracker is at this house this week."))
+            return
+        }
         val me = list.find { it.getString("id") == selected } ?: list.first().also { selected = it.getString("id") }
         val color = Members.parse(me.getString("color"))
 

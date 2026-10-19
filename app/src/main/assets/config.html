@@ -5,38 +5,52 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>PortalHub REDUX</title>
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#121418" id="themeColor">
-<script>try{document.documentElement.dataset.theme=localStorage.getItem('portalhub-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
+<meta name="theme-color" content="#f5f6fa" id="themeColor">
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('portalhub-theme')||'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%23F0584C'/%3E%3Crect x='16' y='28' width='68' height='56' rx='10' fill='white'/%3E%3Crect x='24' y='42' width='32' height='9' rx='4.5' fill='%232BB3A3'/%3E%3Crect x='24' y='56' width='44' height='9' rx='4.5' fill='%23F2A93B'/%3E%3Crect x='24' y='70' width='24' height='9' rx='4.5' fill='%234FA3E3'/%3E%3C/svg%3E">
 <style>
-  /* Dark by default; the header button switches to light (remembered in this browser). */
+  /* Light by default; the header button switches to dark (remembered in this browser). */
   :root {
-    color-scheme: dark;
-    --bg: #121418; --card: #1c2027; --card-border: #2a3039; --ink: #e7eaf0; --ink2: #c4cad4;
-    --muted: #9ba5b3; --faint: #7d8794; --line: #2a3039; --ghost: #2c333d;
-    --field: #14171c; --field-border: #36404c; --ok: #4cc27a; --err: #ff6b5f; --shadow: rgba(0,0,0,.35);
-  }
-  :root[data-theme="light"] {
     color-scheme: light;
-    --bg: #f4f1ea; --card: #ffffff; --card-border: #e8e4da; --ink: #333a45; --ink2: #4d535e;
-    --muted: #737983; --faint: #9aa0a8; --line: #efece4; --ghost: #eae6dc;
-    --field: #fbfaf6; --field-border: #ddd8cc; --ok: #2e9e4f; --err: #d63b2f; --shadow: rgba(60,50,40,.06);
+    --accent: #4f46e5; --accent-soft: #eef0ff; --accent-ink: #ffffff;
+    --bg: #f5f6fa; --card: #ffffff; --card-border: transparent; --ink: #1d2433; --ink2: #3b4458;
+    --muted: #6b7489; --faint: #98a0b3; --line: #eceef4; --ghost: #eef0f6;
+    --field: #f5f6fa; --field-border: #e2e5ee; --ok: #12a05c; --err: #e0463b; --shadow: rgba(30,40,80,.07);
+    --side: #1d2433; --side-ink: #aab2c5;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --accent: #8b87ff; --accent-soft: #272a45; --accent-ink: #11131f;
+    --bg: #0f1117; --card: #181b24; --card-border: transparent; --ink: #e8ebf3; --ink2: #c3c9d8;
+    --muted: #98a1b5; --faint: #78819a; --line: #242836; --ghost: #232735;
+    --field: #0f1117; --field-border: #2c3142; --ok: #4cc27a; --err: #ff6b5f; --shadow: rgba(0,0,0,.4);
+    --side: #0b0d12; --side-ink: #8d97ad;
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; padding: 20px 16px 48px;
+    margin: 0; padding: 20px 16px 96px;
     background: var(--bg); color: var(--ink);
-    font: 16px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif;
+    font: 16px/1.5 Inter, "Segoe UI", Roboto, -apple-system, sans-serif;
+    max-width: 760px; margin-left: auto; margin-right: auto;
   }
-  h1 { font-size: 23px; margin: 0 0 4px; color: var(--ink); }
-  .sub { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+  h1 { font-size: 20px; margin: 0; color: var(--ink); letter-spacing: -.01em; }
+  .sub { display: none; }
+  #pageHead { margin: 18px 2px 14px; }
+  #pageHead h2 { font-size: 28px; margin: 0; letter-spacing: -.02em; }
+  #pageHead p { margin: 4px 0 0; color: var(--muted); font-size: 15px; }
   .card {
-    background: var(--card); border: 1px solid var(--card-border); border-radius: 16px;
-    padding: 16px; margin-bottom: 16px;
-    box-shadow: 0 2px 6px var(--shadow);
+    background: var(--card); border-radius: 20px;
+    padding: 20px; margin-bottom: 14px;
+    box-shadow: 0 1px 2px var(--shadow), 0 8px 24px var(--shadow);
   }
+  .card > strong:first-child { display: block; font-size: 18px; letter-spacing: -.01em; }
+  /* Secondary cards fold up under their title so each tab opens short and calm. */
+  .card.fold > strong:first-child { cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+  .card.fold > strong:first-child::after { content: "▾"; color: var(--faint); transition: transform .15s; transform: rotate(-90deg); }
+  .card.fold.open > strong:first-child::after { transform: none; }
+  .card.fold:not(.open) > :not(:first-child) { display: none !important; }
   .cal-row {
     display: flex; align-items: center; gap: 12px;
     padding: 10px 0; border-bottom: 1px solid var(--line);
@@ -49,17 +63,19 @@
              -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
   .grow { flex: 1; min-width: 0; }
   button {
-    font: inherit; border: none; border-radius: 12px; cursor: pointer;
-    padding: 12px 16px; background: #f0584c; color: #fff; font-weight: 600;
+    font: inherit; border: none; border-radius: 999px; cursor: pointer;
+    padding: 11px 20px; background: var(--accent); color: var(--accent-ink); font-weight: 600;
   }
+  button:active { transform: scale(.98); }
   button.ghost { background: var(--ghost); color: var(--ink); }
   button.del { background: none; color: #f0584c; font-size: 22px; padding: 4px 8px; flex: none; }
   input[type=text], input[type=url], input[type=date], input[type=time],
   input[type=number], select, textarea {
     width: 100%; font: inherit; color: var(--ink);
-    background: var(--field); border: 1px solid var(--field-border); border-radius: 12px;
-    padding: 12px; margin: 6px 0 12px;
+    background: var(--field); border: 1.5px solid var(--field-border); border-radius: 14px;
+    padding: 12px 14px; margin: 6px 0 12px; outline: none;
   }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
   textarea { min-height: 72px; resize: vertical; }
   input[type=color] {
     width: 52px; height: 40px; border: none; background: none; padding: 0;
@@ -82,10 +98,10 @@
   }
   .wiz-dots { flex: 1; display: flex; gap: 7px; justify-content: center; }
   .wiz-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--field-border); transition: all .2s; }
-  .wiz-dot.on { background: #f0584c; width: 22px; border-radius: 5px; }
+  .wiz-dot.on { background: var(--accent); width: 22px; border-radius: 5px; }
   .wiz-skip { color: var(--muted); font-size: 14px; background: none; border: none; padding: 8px; }
   .wiz-body { flex: 1; max-width: 560px; width: 100%; margin: 0 auto; padding: 8px 20px 16px; }
-  .wiz-kicker { color: #f0584c; font-size: 13px; font-weight: 600; letter-spacing: .12em; }
+  .wiz-kicker { color: var(--accent); font-size: 13px; font-weight: 600; letter-spacing: .12em; }
   .wiz-title { font-size: 26px; font-weight: 700; margin: 6px 0 8px; line-height: 1.2; }
   .wiz-sub { color: var(--muted); font-size: 15px; line-height: 1.5; margin-bottom: 18px; }
   .wiz-nav {
@@ -94,17 +110,39 @@
   }
   .wiz-nav button { flex: 1; padding: 15px; font-size: 16px; border-radius: 14px; }
   .wiz-emoji { font-size: 44px; margin: 4px 0 10px; }
-  /* Seven tabs are wider than a phone: let the row scroll by itself instead of panning the whole page. */
-  #tabbar { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  #tabbar {
+    position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; display: flex; gap: 2px;
+    background: var(--card); padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    box-shadow: 0 -4px 20px var(--shadow); overflow-x: auto; scrollbar-width: none; margin: 0 !important;
+  }
   #tabbar::-webkit-scrollbar { display: none; }
-  #tabbar button { flex: 1 0 auto !important; padding: 11px 14px; }
+  #tabbar button {
+    flex: 1 0 64px !important; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 6px 4px; border-radius: 14px; font-size: 11px; font-weight: 600;
+    background: none; color: var(--muted);
+  }
+  #tabbar button:not(.ghost) { background: var(--accent-soft); color: var(--accent); }
+  #tabbar .ti { font-size: 22px; line-height: 1.2; }
+  @media (min-width: 900px) {
+    body { margin-left: 280px; margin-right: auto; padding: 32px 40px 48px; max-width: 880px; }
+    #tabbar {
+      right: auto; top: 0; width: 240px; flex-direction: column; gap: 4px; overflow: visible;
+      background: var(--side); padding: 76px 14px 20px; box-shadow: none;
+    }
+    #tabbar::before { content: "PortalHub"; position: absolute; top: 26px; left: 28px; color: #fff; font-size: 20px; font-weight: 700; }
+    #tabbar button { flex: none !important; flex-direction: row; gap: 12px; padding: 11px 14px; font-size: 15px; color: var(--side-ink); border-radius: 12px; justify-content: flex-start; }
+    #tabbar button:hover { background: rgba(255,255,255,.07); }
+    #tabbar button:not(.ghost) { background: var(--accent); color: var(--accent-ink); }
+    #tabbar .ti { font-size: 19px; width: 26px; text-align: center; }
+    h1 { display: none; }
+  }
   details { margin-top: 4px; }
   summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
   ol { padding-left: 20px; color: var(--ink2); font-size: 14px; }
   ol li { margin-bottom: 8px; }
   .empty { color: var(--muted); text-align: center; padding: 12px 0; }
   code { background: var(--line); border-radius: 5px; padding: 1px 6px; font-size: 13px; }
-  a { color: #f0584c; }
+  a { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -120,17 +158,20 @@
 
   <button class="ghost" id="themeBtn" onclick="toggleTheme()" style="float:right;padding:6px 12px;font-size:14px;" aria-label="Switch between dark and light">☀️ Light</button>
   <h1>PortalHub REDUX</h1>
-  <div class="sub">Your family hub, served straight from the Portal</div>
-
-  <div id="tabbar" style="display:flex;gap:8px;margin-bottom:16px;">
-    <button data-tabbtn="calendar" onclick="showTab('calendar')" style="flex:1;">📅 Calendar</button>
-    <button data-tabbtn="chores" class="ghost" onclick="showTab('chores')" style="flex:1;">✅ Chores</button>
-    <button data-tabbtn="routines" class="ghost" onclick="showTab('routines')" style="flex:1;">⏰ Get Ready</button>
-    <button data-tabbtn="lists" class="ghost" onclick="showTab('lists')" style="flex:1;">📝 Lists</button>
-    <button data-tabbtn="meals" class="ghost" onclick="showTab('meals')" style="flex:1;">🍽️ Meals</button>
-    <button data-tabbtn="family" class="ghost" onclick="showTab('family')" style="flex:1;">👨‍👩‍👧 Family</button>
-    <button data-tabbtn="settings" class="ghost" onclick="showTab('settings')" style="flex:1;">⚙️ Settings</button>
-  </div>
+  
+  <nav id="tabbar">
+    <button data-tabbtn="calendar" onclick="showTab('calendar')"><span class="ti">📅</span><span>Calendar</span></button>
+    <button data-tabbtn="chores" class="ghost" onclick="showTab('chores')"><span class="ti">✅</span><span>Chores</span></button>
+    <button data-tabbtn="lists" class="ghost" onclick="showTab('lists')"><span class="ti">📝</span><span>Lists</span></button>
+    <button data-tabbtn="meals" class="ghost" onclick="showTab('meals')"><span class="ti">🍽️</span><span>Meals</span></button>
+    <button data-tabbtn="routines" class="ghost" onclick="showTab('routines')"><span class="ti">⏰</span><span>Get Ready</span></button>
+    <button data-tabbtn="potty" class="ghost" onclick="showTab('potty')"><span class="ti">🚽</span><span>Pee Tracker</span></button>
+    <button data-tabbtn="shopping" class="ghost" onclick="showTab('shopping')"><span class="ti">🛒</span><span>Shopping</span></button>
+    <button data-tabbtn="rewards" class="ghost" onclick="showTab('rewards')"><span class="ti">💰</span><span>Reward Shop</span></button>
+    <button data-tabbtn="family" class="ghost" onclick="showTab('family')"><span class="ti">👨‍👩‍👧</span><span>Family</span></button>
+    <button data-tabbtn="settings" class="ghost" onclick="showTab('settings')"><span class="ti">⚙️</span><span>Settings</span></button>
+  </nav>
+  <div id="pageHead"><h2></h2><p></p></div>
 
   <div class="card" data-tab="chores">
     <strong>⭐ Points this week</strong>
@@ -184,7 +225,7 @@
     <button class="ghost" style="width:100%;margin-top:8px;" onclick="choreAct({action:'restoreDefaultProfiles'})">Restore the default age profiles</button>
   </div>
 
-  <div class="card" data-tab="chores">
+  <div class="card" data-tab="rewards">
     <strong>🎁 Rewards (the 💰 Reward Shop 💰)</strong>
     <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Prizes the kids can spend this week's points on. Tap any emoji, name or cost to change it. Spending takes points off and they reset every Friday, so unspent points don't carry over. Kids can pick from them on the board's <strong>💰 Reward Shop 💰</strong> tab (turn it on under Settings → Board tabs); a parent approves with the PIN.</div>
     <div id="rewardBox"></div>
@@ -289,7 +330,7 @@
     <div id="listsMsg" class="msgline"></div>
   </div>
 
-  <div class="card" data-tab="lists">
+  <div class="card" data-tab="shopping">
     <strong>🛒 Shopping list</strong>
     <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Household items. On the board this tab is locked behind the parent PIN. Turn it on under Settings → Board tabs.</div>
     <div id="shopCats" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;"></div>
@@ -301,6 +342,11 @@
     <div id="shopItems" style="margin-top:10px;"></div>
     <button class="ghost" style="width:100%;margin-top:8px;" onclick="shopAct({action:'clearDone'})">Clear checked items</button>
     <div id="shopMsg" class="msgline"></div>
+  </div>
+
+  <div class="card" data-tab="potty">
+    <div id="pottyKidsBox"></div>
+    <div id="pottyMsg" class="msgline"></div>
   </div>
 
   <div class="card" data-tab="meals" id="aiMealCard" style="display:none;">
@@ -434,6 +480,14 @@
   </div>
 
   <div class="card" data-tab="settings">
+    <strong>📷 Upload photos</strong>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Send photos from this phone or computer to the Portal's photo frame. They go in the Portal's <code>Pictures</code> folder, so set the photo frame's source to <strong>Local folder</strong> there. JPG, PNG or WebP, up to 15 MB each.</div>
+    <input type="file" id="photoFiles" accept="image/jpeg,image/png,image/webp" multiple style="margin:0 0 10px;">
+    <button style="width:100%;" onclick="uploadPhotos()">Upload</button>
+    <div id="photoMsg" class="msgline"></div>
+  </div>
+
+  <div class="card" data-tab="settings">
     <strong>💤 Idle screen</strong>
     <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">What the Portal does when no one's touched the board for a while.</div>
     <label style="display:flex;align-items:flex-start;gap:10px;font-size:15px;color:var(--ink);margin-bottom:10px;">
@@ -540,7 +594,6 @@
       <div style="font-size:13px;color:var(--muted);margin:4px 0 6px;">The tab the Portal starts on, and returns to after it has been idle.</div>
       <select id="defaultTab" onchange="postFeatures({defaultTab: this.value})" style="margin:0;"></select>
     </div>
-    <div id="pottyKidsBox" style="display:none;margin-top:14px;"></div>
     <div id="featMsg" class="msgline"></div>
   </div>
 
@@ -925,8 +978,6 @@ function renderFeatures(f){
   sel.innerHTML = Object.keys(TAB_LABELS).filter(k => k !== 'shopping' && f[k]).map(k =>
     `<option value="${k}">${TAB_LABELS[k].split(' (')[0]}</option>`).join('');
   sel.value = f.defaultTab;
-  document.getElementById('pottyKidsBox').style.display = f.potty ? '' : 'none';
-  if (f.potty) loadPottyKids();
 }
 
 async function loadFeatures(){
@@ -968,6 +1019,23 @@ async function saveVoice(){
   } catch(e){ show('voiceMsg', e.message, false); loadVoice(); }
 }
 
+async function uploadPhotos(){
+  const files = [...document.getElementById('photoFiles').files];
+  if (!files.length) return show('photoMsg', 'Choose some photos first', false);
+  let ok = 0, bad = [];
+  for (const f of files) {
+    show('photoMsg', `Uploading ${ok + bad.length + 1} of ${files.length}…`, true);
+    try {
+      const r = await fetch('/api/photos?name=' + encodeURIComponent(f.name), {method:'POST', body: f});
+      const b = await r.json();
+      if (!r.ok) throw new Error(b.error || 'failed');
+      ok++;
+    } catch(e){ bad.push(f.name + ': ' + e.message); }
+  }
+  show('photoMsg', `✓ ${ok} uploaded` + (bad.length ? ` · ${bad.length} failed: ` + bad.join('; ') : ''), !bad.length);
+  document.getElementById('photoFiles').value = '';
+}
+
 async function loadPottyKids(){
   try {
     const st = await (await fetch('/api/potty')).json();
@@ -983,8 +1051,8 @@ async function savePottyKids(){
   try {
     const r = await fetch('/api/potty', {method:'POST', body: JSON.stringify({action:'setKids', memberIds: ids})});
     if (!r.ok) throw new Error((await r.json()).error || 'failed');
-    show('featMsg', 'Pee Tracker people updated', true);
-  } catch(e){ show('featMsg', e.message, false); loadPottyKids(); }
+    show('pottyMsg', 'Pee Tracker people updated', true);
+  } catch(e){ show('pottyMsg', e.message, false); loadPottyKids(); }
 }
 
 // ----- shopping list -----
@@ -1262,7 +1330,7 @@ let currentTabName = 'calendar';
 function applyThemeLabel(){
   const light = document.documentElement.dataset.theme === 'light';
   const b = document.getElementById('themeBtn'); if (b) b.textContent = light ? '🌙 Dark' : '☀️ Light';
-  const m = document.getElementById('themeColor'); if (m) m.content = light ? '#f0584c' : '#121418';
+  const m = document.getElementById('themeColor'); if (m) m.content = light ? '#f5f6fa' : '#0f1117';
 }
 function toggleTheme(){
   const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
@@ -1272,8 +1340,35 @@ function toggleTheme(){
 }
 applyThemeLabel();
 
+const TAB_HEADS = {
+  calendar:['Calendar','Add events and connect your family calendars.'],
+  chores:['Chores','Set chores, points and weekly goals for each kid.'],
+  lists:['Lists','Shared to-do and packing lists.'],
+  meals:['Meals','Plan the week and keep your recipes.'],
+  routines:['Get Ready','Morning, afternoon and evening checklists.'],
+  potty:['Pee Tracker','Choose who uses the dry-streak tracker.'],
+  shopping:['Shopping','The household shopping list.'],
+  rewards:['Reward Shop','Prizes kids can spend their weekly stars on. Open Thursdays.'],
+  family:['Family','Who lives here. Set which weeks each kid is at your house.'],
+  settings:['Settings','Board tabs, look and feel, backup and sync.']};
+// Cards that are rarely touched start folded.
+const FOLD_TITLES = ['Starter chores','Chore profiles','Edit chore profiles','Recipe box','Add a calendar','Smart import'];
+function foldCards(){
+  document.querySelectorAll('.card[data-tab]').forEach(c => {
+    const h = c.firstElementChild;
+    if (!h || h.tagName !== 'STRONG' || c.dataset.foldInit) return;
+    c.dataset.foldInit = '1';
+    if (c.dataset.tab !== 'settings' && !FOLD_TITLES.some(t => h.textContent.includes(t))) return;
+    c.classList.add('fold');
+    h.addEventListener('click', () => c.classList.toggle('open'));
+  });
+}
 function showTab(name){
   currentTabName = name;
+  foldCards();
+  const hd = TAB_HEADS[name];
+  if (hd) { document.querySelector('#pageHead h2').textContent = hd[0]; document.querySelector('#pageHead p').textContent = hd[1]; }
+  window.scrollTo(0, 0);
   document.querySelectorAll('[data-tab]').forEach(el =>
     el.style.display = el.dataset.tab === name ? '' : 'none');
   // AI cards additionally require AI to be ready — tab logic wins otherwise.
@@ -1283,9 +1378,11 @@ function showTab(name){
   }
   document.querySelectorAll('[data-tabbtn]').forEach(b =>
     b.className = b.dataset.tabbtn === name ? '' : 'ghost');
-  if (name === 'lists') { loadListsP(); loadShopping(); }
+  if (name === 'lists') loadListsP();
+  if (name === 'shopping') loadShopping();
+  if (name === 'potty') loadPottyKids();
   if (name === 'family') loadMembers();
-  if (name === 'chores') loadChores();
+  if (name === 'chores' || name === 'rewards') loadChores();
   if (name === 'routines') loadRoutines();
   if (name === 'meals') loadMeals();
 }
@@ -1403,7 +1500,7 @@ function renderChores(){
   document.getElementById('starBox').innerHTML = (st.members || []).map(m => {
     const stars = st.stars[m.id] || 0;
     const goal = st.goals[m.id] || 10;
-    const pct = Math.min(100, Math.round(stars / goal * 100));
+    const pct = Math.max(0, Math.min(100, Math.round(stars / goal * 100)));
     return `<div style="margin-bottom:12px;">
       <div style="display:flex;align-items:center;gap:8px;">
         <div class="dot" style="background:${esc(m.color)};"></div>
@@ -1978,6 +2075,9 @@ function renderMembers(){
              placeholder="${m.hasPin && typeof m.pin !== 'string' ? '••••' : 'PIN'}" maxlength="4" inputmode="numeric"
              autocomplete="off" style="margin:0;width:74px;" title="Optional: only this person (or a parent) can check off their chores. Leave as •••• to keep the current PIN."
              oninput="members[${i}].pin=this.value">
+      <select style="margin:0;width:auto;" title="Which weeks this person is at your house (weeks flip every Friday)" onchange="members[${i}].week=this.value">
+        ${[['','Every week'],['A','A weeks'],['B','B weeks']].map(([v,t]) => `<option value="${v}"${(m.week||'')===v?' selected':''}>${t}</option>`).join('')}
+      </select>
       ${m.hasPin ? `<button class="del" title="Remove PIN" style="font-size:11px;"
              onclick="members[${i}].pin='';members[${i}].hasPin=false;renderMembers()">PIN✕</button>` : ''}
       <button class="del" onclick="members.splice(${i},1);renderMembers()">✕</button>
