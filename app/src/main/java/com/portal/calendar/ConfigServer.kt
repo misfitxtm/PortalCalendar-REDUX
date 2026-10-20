@@ -169,7 +169,9 @@ class ConfigServer(
         }
         s.uri == "/api/icloud/connect" && s.method == Method.POST -> {
             val o = org.json.JSONObject(readBody(s))
-            CalDav.connect(ctx, o.getString("email").trim(), o.getString("password").trim())
+            // "server" is optional: blank/absent = iCloud, otherwise a CalDAV server address.
+            val server = if (o.isNull("server")) "" else o.getString("server").trim()
+            CalDav.connect(ctx, server, o.getString("email").trim(), o.getString("password").trim())
             Writers.ensureDefault(ctx)
             json(Writers.statusJson(ctx))
         }
@@ -225,8 +227,9 @@ class ConfigServer(
             json("{\"ok\":true}")
         }
         s.uri == "/api/validate" && s.method == Method.POST -> {
-            val url = org.json.JSONObject(readBody(s)).getString("url")
-            val count = App.instance.sync.validateFeed(url)
+            val o = org.json.JSONObject(readBody(s))
+            val count = App.instance.sync.validateFeed(
+                o.getString("url"), ConfigStore.cleanSource(if (o.isNull("source")) null else o.optString("source")))
             json("{\"ok\":true,\"events\":$count}")
         }
         s.uri == "/api/export" && s.method == Method.GET ->

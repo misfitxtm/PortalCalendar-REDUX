@@ -1,0 +1,14 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Portal Test//EN
+BEGIN:VEVENT
+UID:cafe-001
+DTSTAMP:20261001T120000Z
+DTSTART;VALUE=DATE:20261022
+DTEND;VALUE=DATE:20261023
+SUMMARY:Café ☕ Müller\, Zoë — 日本語 & <b>bold</b> "quoted" 'single'
+LOCATION:Zürich\, Straße 5
+DESCRIPTION:Line one\nLine two with ]]> inside and a long long long long long
+  long long long long folded tail 😀
+END:VEVENT
+END:VCALENDAR

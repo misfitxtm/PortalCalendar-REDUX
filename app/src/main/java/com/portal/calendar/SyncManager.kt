@@ -63,35 +63,45 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
     private fun fetchWithCache(feed: FeedConfig, problems: MutableList<String>): String? {
         val cache = File(ctx.filesDir, "feed_" + md5(feed.url) + ".ics")
         try {
-            val url = if (feed.url.startsWith("webcal://"))
-                "https://" + feed.url.removePrefix("webcal://") else feed.url
-            val conn = URL(url).openConnection() as HttpURLConnection
-            conn.connectTimeout = 10_000
-            conn.readTimeout = 20_000
-            conn.instanceFollowRedirects = true
-            conn.setRequestProperty("User-Agent", "PortalFamilyCalendar/1.0")
-            try {
-                if (conn.responseCode !in 200..299)
-                    throw RuntimeException("HTTP ${conn.responseCode}")
-                val text = conn.inputStream.bufferedReader().readText()
-                if (!text.contains("BEGIN:VCALENDAR"))
-                    throw RuntimeException("not an iCal feed")
-                // Atomic: a crash mid-write must not corrupt the offline copy.
-                val tmp = File(cache.path + ".tmp")
-                tmp.writeText(text)
-                tmp.renameTo(cache)
-                return text
-            } finally {
-                conn.disconnect()
-            }
+            val text = if (feed.source == "caldav") CalDav.fetchIcs(ctx, feed.url) else fetchIcsText(feed.url)
+            if (!text.contains("BEGIN:VCALENDAR"))
+                throw RuntimeException("not an iCal feed")
+            // Atomic: a crash mid-write must not corrupt the offline copy.
+            val tmp = File(cache.path + ".tmp")
+            tmp.writeText(text)
+            tmp.renameTo(cache)
+            return text
         } catch (e: Exception) {
+            // CalDAV errors are already readable ("CalDAV account not connected", "sign-in
+            // failed…"), so say what happened instead of a bare "offline".
+            val reason = if (feed.source == "caldav" && e is IllegalArgumentException) e.message else null
             return if (cache.exists()) {
-                problems.add("${feed.name}: offline, showing cached copy")
+                problems.add("${feed.name}: " +
+                    (if (reason != null) "$reason (showing cached copy)" else "offline, showing cached copy"))
                 cache.readText()
             } else {
-                problems.add("${feed.name}: fetch failed (${e.message ?: e.javaClass.simpleName})")
+                problems.add("${feed.name}: " +
+                    (reason ?: "fetch failed (${e.message ?: e.javaClass.simpleName})"))
                 null
             }
+        }
+    }
+
+    /** GETs a published iCal/webcal link (no auth). */
+    private fun fetchIcsText(feedUrl: String): String {
+        val url = if (feedUrl.startsWith("webcal://"))
+            "https://" + feedUrl.removePrefix("webcal://") else feedUrl
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.connectTimeout = 10_000
+        conn.readTimeout = 20_000
+        conn.instanceFollowRedirects = true
+        conn.setRequestProperty("User-Agent", "PortalFamilyCalendar/1.0")
+        try {
+            if (conn.responseCode !in 200..299)
+                throw RuntimeException("HTTP ${conn.responseCode}")
+            return conn.inputStream.bufferedReader().readText()
+        } finally {
+            conn.disconnect()
         }
     }
 
@@ -99,8 +109,8 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
         val out = ArrayList<EventInstance>()
         val tz = TimeZone.getDefault()
         val now = System.currentTimeMillis()
-        val windowStart = now - 35L * DAY_MS
-        val windowEnd = now + 180L * DAY_MS
+        val windowStart = now - WINDOW_PAST_DAYS * DAY_MS
+        val windowEnd = now + WINDOW_FUTURE_DAYS * DAY_MS
         // UIDs the user deleted from the board — keep them hidden until the
         // source feed catches up (Google's secret iCal can lag hours).
         val suppressed = DeletedEvents.activeUids(ctx)
@@ -182,8 +192,20 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
      * Test-fetches a feed URL (called from the config page when adding a
      * calendar, on the HTTP worker thread). Returns the event count; throws
      * IllegalArgumentException with a readable message if anything is wrong.
+     * [source] "caldav" reads the calendar through the connected CalDAV account
+     * ([rawUrl] is its collection address) instead of fetching a published link.
      */
-    fun validateFeed(rawUrl: String): Int {
+    fun validateFeed(rawUrl: String, source: String = "ics"): Int {
+        if (source == "caldav") {
+            val text = try {
+                CalDav.fetchIcs(ctx, rawUrl)
+            } catch (e: IllegalArgumentException) {
+                throw e
+            } catch (e: Exception) {
+                throw IllegalArgumentException("couldn't read that calendar (${e.message ?: e.javaClass.simpleName})")
+            }
+            return Biweekly.parse(text).all().sumOf { it.events.size }
+        }
         val url = if (rawUrl.startsWith("webcal://"))
             "https://" + rawUrl.removePrefix("webcal://") else rawUrl
         try {
@@ -250,5 +272,8 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
 
     companion object {
         const val DAY_MS = 86_400_000L
+        /** Events are expanded from this many days back to this many days ahead (CalDAV fetches the same span). */
+        const val WINDOW_PAST_DAYS = 35L
+        const val WINDOW_FUTURE_DAYS = 180L
     }
 }

@@ -1,0 +1,83 @@
+<?xml version='1.0' encoding='utf-8'?>
+<multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><response><href>/alice/family/piano.ics</href><propstat><prop><C:calendar-data>BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Portal Test//EN
+BEGIN:VTIMEZONE
+TZID:America/New_York
+BEGIN:STANDARD
+DTSTART:19701101T020000
+RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU
+TZNAME:EST
+TZOFFSETFROM:-0400
+TZOFFSETTO:-0500
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:19700308T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU
+TZNAME:EDT
+TZOFFSETFROM:-0500
+TZOFFSETTO:-0400
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:piano-weekly-001
+DTSTART;TZID=America/New_York:20260901T160000
+DTEND;TZID=America/New_York:20260901T170000
+DTSTAMP:20261001T120000Z
+EXDATE;TZID=America/New_York:20261110T160000
+RRULE:FREQ=WEEKLY;BYDAY=TU
+SUMMARY:Piano lesson
+END:VEVENT
+BEGIN:VEVENT
+UID:piano-weekly-001
+RECURRENCE-ID;TZID=America/New_York:20261103T160000
+DTSTART;TZID=America/New_York:20261103T170000
+DTEND;TZID=America/New_York:20261103T180000
+DTSTAMP:20261001T120000Z
+SUMMARY:Piano lesson (moved)
+END:VEVENT
+END:VCALENDAR
+</C:calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat></response><response><href>/alice/family/cafe.ics</href><propstat><prop><C:calendar-data>BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Portal Test//EN
+BEGIN:VEVENT
+UID:cafe-001
+DTSTART;VALUE=DATE:20261022
+DTEND;VALUE=DATE:20261023
+DESCRIPTION:Line one\nLine two with ]]&gt; inside and a long long long long lo
+ ng long long long long folded tail 😀
+DTSTAMP:20261001T120000Z
+LOCATION:Zürich\, Straße 5
+SUMMARY:Café ☕ Müller\, Zoë — 日本語 &amp; &lt;b&gt;bold&lt;/b&gt; "quoted" 'single'
+END:VEVENT
+END:VCALENDAR
+</C:calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat></response><response><href>/alice/family/dentist.ics</href><propstat><prop><C:calendar-data>BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Portal Test//EN
+BEGIN:VTIMEZONE
+TZID:America/New_York
+BEGIN:STANDARD
+DTSTART:19701101T020000
+RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU
+TZNAME:EST
+TZOFFSETFROM:-0400
+TZOFFSETTO:-0500
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:19700308T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU
+TZNAME:EDT
+TZOFFSETFROM:-0500
+TZOFFSETTO:-0400
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:dentist-001
+DTSTART;TZID=America/New_York:20261027T150000
+DTEND;TZID=America/New_York:20261027T160000
+DTSTAMP:20261001T120000Z
+LOCATION:12 Main St\, Pikesville
+SUMMARY:Dentist
+END:VEVENT
+END:VCALENDAR
+</C:calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>
