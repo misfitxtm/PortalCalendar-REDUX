@@ -1,0 +1,24 @@
+<?xml version='1.0' encoding='utf-8'?>
+<multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><response><href>/alice/uidtest/a-ten.ics</href><propstat><prop><getetag>"6449d4cee2ed82abf2dce94c87b15b72597f7cf7a4a298b490959eea02c7665b"</getetag><C:calendar-data>BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Portal Test//EN
+BEGIN:VEVENT
+UID:evt-10
+DTSTART:20261201T150000Z
+DTEND:20261201T160000Z
+DTSTAMP:20261001T120000Z
+SUMMARY:Ten (must survive deleting evt-1)
+END:VEVENT
+END:VCALENDAR
+</C:calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat></response><response><href>/alice/uidtest/b-one.ics</href><propstat><prop><getetag>"35e27ec14985328e6b82bc7cbc25eeb6be185b444b4940bfdb88721443dba698"</getetag><C:calendar-data>BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Portal Test//EN
+BEGIN:VEVENT
+UID:evt-1
+DTSTART:20261202T150000Z
+DTEND:20261202T160000Z
+DTSTAMP:20261001T120000Z
+SUMMARY:One
+END:VEVENT
+END:VCALENDAR
+</C:calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>

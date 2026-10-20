@@ -75,11 +75,13 @@ portal-calendar/
             │   DeletedEvents.kt     # tombstones so deletes stay hidden until feeds catch up
             │
             ├─ ── Calendar read/write + parsing ──
-            │   SyncManager.kt       # fetches & caches ICS feeds; expands recurrence; builds instances
-            │   CalDav.kt            # iCloud CalDAV (OkHttp PROPFIND/PUT)
+            │   SyncManager.kt       # fetches & caches ICS feeds (or CalDAV calendars); expands recurrence; builds instances
+            │   CalDav.kt            # the connected iCloud/CalDAV account (prefs) → CalDavClient
+            │   CalDavClient.kt      # CalDAV over OkHttp: discovery, REPORT read, PUT/DELETE (no android.*)
+            │   CalDavXml.kt         # pure CalDAV helpers: server URL rules, request bodies, multistatus → ICS
             │   GoogleCal.kt         # Google Calendar API + OAuth (device-pasted desktop client)
             │   GoogleTasks.kt       # Google Tasks two-way list sync
-            │   Writers.kt           # routes event writes to the chosen account (iCloud/Google)
+            │   Writers.kt           # routes event writes to the chosen account (iCloud/CalDAV or Google)
             │   MagicWords.kt        # parses "groceries: …" / "chore: …" command events; fuzzy match
             │
             ├─ ── External integrations ──
@@ -130,8 +132,8 @@ configures from is a phone browser talking to an HTTP server *inside the app*.
   └───────┬───────────────┬───────────────┬───────────────┬───────────┘
           │ HTTPS          │ HTTPS         │ HTTPS         │ HTTPS
           ▼                ▼               ▼               ▼
-   ICS/webcal feeds   Google APIs     Apple iCloud     Open-Meteo / Gemini
-   (read calendars)   (Cal + Tasks)   (CalDAV write)   (weather / AI)        ← §5
+   ICS/webcal feeds   Google APIs     iCloud / CalDAV  Open-Meteo / Gemini
+   (read calendars)   (Cal + Tasks)   (read + write)   (weather / AI)        ← §5
 ```
 
 C4 Level 1, in words: **one Person actor** (a household) interacts with **one
@@ -177,7 +179,8 @@ modules within the single APK.
   alive by `KeepAliveService`.
 
 ### Supporting in-process modules
-- **SyncManager** — periodically fetches configured iCal feeds, parses them
+- **SyncManager** — periodically fetches configured iCal feeds (or, for feeds with
+  `source: "caldav"`, reads the calendar through the connected CalDAV account), parses them
   (biweekly), expands recurrence, applies tombstones, and publishes event
   instances to the board.
 - **Writers / CalDav / GoogleCal / GoogleTasks** — two-way calendar/task writes.
@@ -240,7 +243,7 @@ everything else is optional and user-supplied.
 | **Google Calendar API** (`calendar/v3`) | Two-way event create/delete | REST via `GoogleCal` | OAuth2 (user's own Desktop client; `g_refresh` token) |
 | **Google OAuth2** (`accounts.google.com`, `oauth2.googleapis.com`) | Obtain/refresh Google tokens | code → token exchange; localhost/Portal-IP redirect | OAuth2 |
 | **Google Tasks API** (`tasks/v1`) | Two-way sync of a shared list ↔ a Tasks list | REST via `GoogleTasks` | OAuth2 (`auth/tasks`) |
-| **Apple iCloud** (`caldav.icloud.com`) | Write events to iCloud calendars | **CalDAV** PROPFIND/PUT via **OkHttp** | app-specific password |
+| **iCloud / any CalDAV server** (default `caldav.icloud.com`; or Nextcloud, Radicale, Baïkal, Fastmail… via the `icloud_server` pref) | One account per Portal. Reads chosen calendars onto the board (feeds with `source: "caldav"`) and writes/deletes events | **CalDAV** via **OkHttp**: PROPFIND discovery (principal → calendar-home-set → calendars, with a `/.well-known/caldav` retry), `calendar-query` REPORT (window: now−35d…now+180d, recurring masters returned unexpanded and fed to biweekly like any ICS), PUT/DELETE (only the PROPFIND discovery follows redirects; a redirected REPORT/PUT/DELETE is reported as "reconnect using its final address", since OkHttp would replay it as a body-less GET that looks successful) | HTTP Basic: iCloud app-specific password, or the server's (app) password |
 | **Open-Meteo** (`api.open-meteo.com`, `geocoding-api.open-meteo.com`) | Weather forecast + city/ZIP lookup | REST via `Weather` | none (keyless) |
 | **Google Gemini** (`generativelanguage.googleapis.com/v1beta`) | Optional: smart import, recipes, meal planning, voice/NL parsing | REST via `Gemini` | user's API key (`ai_key`) |
 | **mDNS / NSD** (LAN, not internet) | Hub discovery for multi-Portal sync (`_portalhub._tcp`) | `android.net.nsd` + multicast lock | none (trusted LAN) |
@@ -287,8 +290,10 @@ a physical, discontinued consumer device on the user's home network.
 ## 7. SECURITY CONSIDERATIONS
 
 - **Auth model — external services:** OAuth2 for Google (user's own Desktop
-  client + refresh token), an Apple **app-specific password** for iCloud CalDAV,
-  a user-supplied **API key** for Gemini. Calendar feed URLs are bearer-secret
+  client + refresh token), an Apple **app-specific password** for iCloud CalDAV
+  (or a username + password for another CalDAV server, sent as HTTP Basic, and
+  only to the connected server's origin or the hosts it listed calendars on —
+  `CalDavXml.isOnAccount`), a user-supplied **API key** for Gemini. Calendar feed URLs are bearer-secret
   (treated like passwords).
 - **Auth model — the config server:** **unauthenticated by design.** Anyone on
   the same Wi-Fi can open `http://<portal-ip>:8090`. The threat model assumes a
@@ -304,9 +309,11 @@ a physical, discontinued consumer device on the user's home network.
 - **Data in transit:** **TLS** for every external API and feed fetch.
   `usesCleartextTraffic="true"` is enabled to allow (a) the local `:8090` config
   server and (b) plain-`http://` iCal feeds users may paste; it is not used for
-  any credentialed external call.
+  any credentialed call to Google, iCloud or the other integrations. The one
+  exception is a user-entered **`http://` CalDAV server** (e.g. a Radicale on the
+  LAN): its Basic credentials then travel unencrypted, which the setup docs call out.
 - **Backup/clone bundle:** `ConfigBundle` export contains **all credentials**
-  (Google refresh token, iCloud password, Gemini key) base64-encoded — the UI
+  (Google refresh token, iCloud/CalDAV password, Gemini key) base64-encoded — the UI
   warns to treat the code like a password.
 - **Permissions requested:** `INTERNET`, `ACCESS_NETWORK_STATE`,
   `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE` (mDNS), `WAKE_LOCK`
@@ -402,7 +409,7 @@ reboot.
 | **Takeover / Yield / Off** | Idle modes: keep the board up forever / let the screensaver run after N min / hold screen only while open. |
 | **Magic words** | Calendar events titled e.g. `groceries: …` or `chore: …` that are routed to a list/chore instead of being shown. |
 | **Inbox calendar** | A dedicated feed whose every event is treated as a command, with no prefix needed. |
-| **CalDAV** | The protocol used to write to iCloud calendars (PROPFIND/PUT). |
+| **CalDAV** | The protocol used to read and write calendars on iCloud and other CalDAV servers (PROPFIND/REPORT/PUT/DELETE). |
 | **ICS / webcal** | iCalendar feed format / its `webcal://` URL scheme; the read path for all calendars. |
 | **RRULE / EXDATE / RECURRENCE-ID** | iCalendar recurrence rule / excluded dates / per-instance override; expanded by biweekly. |
 | **mDNS / NSD** | Multicast DNS service discovery (`android.net.nsd`) used to find the sync hub on the LAN. |

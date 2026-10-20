@@ -1,0 +1,118 @@
+<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:s="http://sabredav.org/ns" xmlns:cal="urn:ietf:params:xml:ns:caldav">
+ <!-- Hand-written in the style of Nextcloud/sabre: the UID line of this event was folded by the server -->
+ <d:response>
+  <d:href>/remote.php/dav/calendars/alice/personal/folded.ics</d:href>
+  <d:propstat>
+   <d:prop>
+    <d:getetag>"1"</d:getetag>
+    <cal:calendar-data>BEGIN:VCALENDAR&#13;
+VERSION:2.0&#13;
+BEGIN:VEVENT&#13;
+UID:folded-uid-with-a-long-name-that-the-server-wrapped-at-seventy-five-ch&#13;
+ aracters-0001&#13;
+DTSTAMP:20261001T120000Z&#13;
+DTSTART:20261201T150000Z&#13;
+SUMMARY:Folded UID&#13;
+END:VEVENT&#13;
+END:VCALENDAR&#13;
+</cal:calendar-data>
+   </d:prop>
+   <d:status>HTTP/1.1 200 OK</d:status>
+  </d:propstat>
+ </d:response>
+ <!-- The only UID in this resource sits on a VALARM (RFC 9074), and its VTODO has another: neither is the event's UID -->
+ <d:response>
+  <d:href>/remote.php/dav/calendars/alice/personal/alarm.ics</d:href>
+  <d:propstat>
+   <d:prop>
+    <d:getetag>"2"</d:getetag>
+    <cal:calendar-data>BEGIN:VCALENDAR&#13;
+VERSION:2.0&#13;
+BEGIN:VEVENT&#13;
+UID:alarm-owner&#13;
+DTSTART:20261202T150000Z&#13;
+SUMMARY:Has an alarm&#13;
+BEGIN:VALARM&#13;
+UID:alarm-inner-uid&#13;
+ACTION:DISPLAY&#13;
+TRIGGER:-PT15M&#13;
+DESCRIPTION:x&#13;
+END:VALARM&#13;
+END:VEVENT&#13;
+BEGIN:VTODO&#13;
+UID:todo-uid&#13;
+SUMMARY:A task in the same file&#13;
+END:VTODO&#13;
+END:VCALENDAR&#13;
+</cal:calendar-data>
+   </d:prop>
+   <d:status>HTTP/1.1 200 OK</d:status>
+  </d:propstat>
+ </d:response>
+ <!-- Recurring master plus an edited instance: two VEVENTs, one UID, one resource -->
+ <d:response>
+  <d:href>/remote.php/dav/calendars/alice/personal/series.ics</d:href>
+  <d:propstat>
+   <d:prop>
+    <cal:calendar-data>BEGIN:VCALENDAR&#13;
+VERSION:2.0&#13;
+BEGIN:VEVENT&#13;
+UID:series-1&#13;
+DTSTART:20261203T150000Z&#13;
+RRULE:FREQ=WEEKLY&#13;
+SUMMARY:Series&#13;
+END:VEVENT&#13;
+BEGIN:VEVENT&#13;
+UID:series-1&#13;
+RECURRENCE-ID:20261210T150000Z&#13;
+DTSTART:20261210T160000Z&#13;
+SUMMARY:Series (moved)&#13;
+END:VEVENT&#13;
+END:VCALENDAR&#13;
+</cal:calendar-data>
+   </d:prop>
+   <d:status>HTTP/1.1 200 OK</d:status>
+  </d:propstat>
+ </d:response>
+ <!-- UID with TEXT escapes and a parameter containing a colon -->
+ <d:response>
+  <d:href>/remote.php/dav/calendars/alice/personal/escaped.ics</d:href>
+  <d:propstat>
+   <d:prop>
+    <cal:calendar-data>BEGIN:VCALENDAR&#13;
+BEGIN:VEVENT&#13;
+UID;X-ORIGIN="https://example.com:443/x":team\, a\;b&#13;
+DTSTART:20261204T150000Z&#13;
+END:VEVENT&#13;
+END:VCALENDAR&#13;
+</cal:calendar-data>
+   </d:prop>
+   <d:status>HTTP/1.1 200 OK</d:status>
+  </d:propstat>
+ </d:response>
+ <!-- CDATA instead of entities -->
+ <d:response>
+  <d:href>/remote.php/dav/calendars/alice/personal/cdata.ics</d:href>
+  <d:propstat>
+   <d:prop>
+    <cal:calendar-data><![CDATA[BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:cdata-uid
+DTSTART:20261205T150000Z
+END:VEVENT
+END:VCALENDAR
+]]></cal:calendar-data>
+   </d:prop>
+   <d:status>HTTP/1.1 200 OK</d:status>
+  </d:propstat>
+ </d:response>
+ <!-- A candidate the server could not return data for -->
+ <d:response>
+  <d:href>/remote.php/dav/calendars/alice/personal/nodata.ics</d:href>
+  <d:propstat>
+   <d:prop><cal:calendar-data/></d:prop>
+   <d:status>HTTP/1.1 404 Not Found</d:status>
+  </d:propstat>
+ </d:response>
+</d:multistatus>

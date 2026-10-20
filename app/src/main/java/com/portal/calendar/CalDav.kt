@@ -1,128 +1,119 @@
 package com.portal.calendar
 
 import android.content.Context
-import okhttp3.Credentials
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.URI
-import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
-import java.util.UUID
-import java.util.concurrent.TimeUnit
 
 /**
- * Minimal iCloud CalDAV client — just enough to discover the account's
- * calendars and PUT new events, authenticated with an Apple ID + app-specific
- * password (account.apple.com → Sign-In and Security → App-Specific Passwords).
- * Events created here land directly in iCloud, so they back-sync natively to
- * every family device; the Portal then sees them via the published ICS feed.
+ * The connected CalDAV account (one per Portal): iCloud — Apple ID + app-specific
+ * password (account.apple.com → Sign-In and Security → App-Specific Passwords) — or
+ * any CalDAV server (Nextcloud, Radicale, Baïkal, Fastmail, Synology…) with a
+ * username + password. Stores the account in prefs and delegates the protocol work
+ * to [CalDavClient]/[CalDavXml].
  *
- * Google calendars can't be written this way (their CalDAV requires OAuth),
- * which is why two-way sync is iCloud-only.
+ * It does two jobs: [addEventTo]/[deleteByUid] write events straight into the real
+ * calendar (so they back-sync to every family device), and [fetchIcs] reads a
+ * calendar for the board — feeds with source "caldav" use it instead of a published
+ * ICS link.
+ *
+ * Google calendars can't be written this way (their CalDAV requires OAuth), which is
+ * why Google has its own API client.
+ *
+ * Pref keys keep their original iCloud-era names so an existing connection keeps
+ * working untouched; `icloud_server` is the only addition (absent/blank = iCloud).
  */
 object CalDav {
-    data class CalInfo(val name: String, val href: String)
-
-    private const val ROOT = "https://caldav.icloud.com/"
-
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .build()
-
-    private val XML = "application/xml; charset=utf-8".toMediaType()
-    private val ICS = "text/calendar; charset=utf-8".toMediaType()
+    private const val TAG = "PortalCalDAV"
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("config", Context.MODE_PRIVATE)
 
     fun isConnected(ctx: Context): Boolean = !prefs(ctx).getString("icloud_email", null).isNullOrEmpty()
     fun email(ctx: Context): String? = prefs(ctx).getString("icloud_email", null)
 
+    /** Normalized server root; iCloud's when `icloud_server` is absent or blank. */
+    fun server(ctx: Context): String = CalDavXml.normalizeServer(prefs(ctx).getString("icloud_server", null))
+
+    fun isIcloud(ctx: Context): Boolean = CalDavXml.isIcloud(server(ctx))
+
+    /** Display host of the connected server (e.g. "cloud.example.com"). */
+    fun host(ctx: Context): String = CalDavXml.hostOf(server(ctx))
+
+    /** Short tag after a calendar's name in pickers: "iCloud" or "CalDAV". */
+    fun label(ctx: Context): String = if (runCatching { isIcloud(ctx) }.getOrDefault(false)) "iCloud" else "CalDAV"
+
     fun calendars(ctx: Context): List<CalInfo> {
         val arr = JSONArray(prefs(ctx).getString("icloud_cals", "[]"))
         return (0 until arr.length()).map {
             val o = arr.getJSONObject(it)
-            CalInfo(o.getString("name"), o.getString("href"))
+            CalInfo(o.getString("name"), o.getString("href"),
+                o.optString("color").takeIf { c -> c.isNotEmpty() })
         }
     }
 
     fun disconnect(ctx: Context) {
         prefs(ctx).edit()
-            .remove("icloud_email").remove("icloud_password")
+            .remove("icloud_email").remove("icloud_password").remove("icloud_server")
             .remove("icloud_cals").remove("icloud_target")
             .apply()
     }
 
-    /** Signs in, discovers calendars, persists everything. Returns the calendars. */
-    fun connect(ctx: Context, email: String, password: String): List<CalInfo> {
-        val principal = propfindHref(ROOT, email, password, 0,
-            """<d:propfind xmlns:d="DAV:"><d:prop><d:current-user-principal/></d:prop></d:propfind>""",
-            "current-user-principal")
-            ?: throw IllegalArgumentException("iCloud sign-in failed — check the Apple ID, and use an app-specific password (not the normal account password)")
-        val principalUrl = resolve(ROOT, principal)
-        val home = propfindHref(principalUrl, email, password, 0,
-            """<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><c:calendar-home-set/></d:prop></d:propfind>""",
-            "calendar-home-set")
-            ?: throw IllegalArgumentException("signed in, but couldn't locate the calendar home")
-        val cals = listCalendars(resolve(principalUrl, home), email, password)
+    /**
+     * Signs in, discovers calendars, persists everything. Returns the calendars.
+     * A blank [server] means iCloud; otherwise it's the CalDAV server's address
+     * (https:// is assumed when no scheme is typed).
+     */
+    fun connect(ctx: Context, server: String?, user: String, password: String): List<CalInfo> {
+        val root = CalDavXml.normalizeServer(server)
+        val cals = CalDavClient(root, user, password).discoverCalendars()
         if (cals.isEmpty())
-            throw IllegalArgumentException("signed in, but found no writable calendars on this account")
+            throw IllegalArgumentException("signed in, but found no calendars that can hold events on this account")
         val arr = JSONArray()
-        cals.forEach { arr.put(JSONObject().put("name", it.name).put("href", it.href)) }
-        prefs(ctx).edit()
-            .putString("icloud_email", email)
+        cals.forEach {
+            val o = JSONObject().put("name", it.name).put("href", it.href)
+            if (it.color != null) o.put("color", it.color)
+            arr.put(o)
+        }
+        val e = prefs(ctx).edit()
+            .putString("icloud_email", user)
             .putString("icloud_password", password)
             .putString("icloud_cals", arr.toString())
-            .apply()
+        if (root == CalDavXml.ICLOUD_ROOT) e.remove("icloud_server") else e.putString("icloud_server", root)
+        e.apply()
+        android.util.Log.i(TAG, "connected: ${cals.size} calendar(s), " +
+            if (CalDavXml.isIcloud(root)) "iCloud" else "custom server")
         return cals
+    }
+
+    private fun client(ctx: Context): CalDavClient {
+        val user = email(ctx)
+        val password = prefs(ctx).getString("icloud_password", null)
+        if (user.isNullOrEmpty() || password == null)
+            throw IllegalArgumentException("CalDAV account not connected")
+        return CalDavClient(server(ctx), user, password)
+    }
+
+    /**
+     * The calendar at [calendarHref] (an absolute collection URL from [calendars])
+     * as iCalendar text, for the next ~6 months and the last ~5 weeks — the same
+     * window the board expands recurring events over.
+     */
+    fun fetchIcs(ctx: Context, calendarHref: String): String {
+        val client = client(ctx)
+        // A feed's address is user-supplied and /api/config is open to the LAN, so the stored
+        // credentials only go to the connected server (or a host it handed us a calendar on).
+        if (!CalDavXml.isOnAccount(calendarHref, server(ctx), calendars(ctx).map { it.href }))
+            throw IllegalArgumentException("not on the connected CalDAV account")
+        val now = System.currentTimeMillis()
+        return client.fetchIcs(calendarHref,
+            now - SyncManager.WINDOW_PAST_DAYS * SyncManager.DAY_MS,
+            now + SyncManager.WINDOW_FUTURE_DAYS * SyncManager.DAY_MS)
     }
 
     /** Creates a VEVENT in the given calendar collection; returns its UID. */
     fun addEventTo(ctx: Context, target: String, title: String,
                    startMillis: Long, endMillis: Long, allDay: Boolean): String {
-        val email = email(ctx) ?: throw IllegalArgumentException("iCloud isn't connected yet")
-        val password = prefs(ctx).getString("icloud_password", null)
-            ?: throw IllegalArgumentException("iCloud isn't connected yet")
-
-        val uid = UUID.randomUUID().toString().uppercase(Locale.US)
-        val utc = SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'", Locale.US)
-            .apply { timeZone = TimeZone.getTimeZone("UTC") }
-        val dateOnly = SimpleDateFormat("yyyyMMdd", Locale.US)
-        val body = buildString {
-            append("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Portal Family Calendar//EN\r\n")
-            append("BEGIN:VEVENT\r\nUID:").append(uid).append("\r\n")
-            append("DTSTAMP:").append(utc.format(Date())).append("\r\n")
-            append("SUMMARY:").append(escape(title)).append("\r\n")
-            if (allDay) {
-                append("DTSTART;VALUE=DATE:").append(dateOnly.format(Date(startMillis))).append("\r\n")
-                append("DTEND;VALUE=DATE:").append(dateOnly.format(Date(endMillis))).append("\r\n")
-            } else {
-                append("DTSTART:").append(utc.format(Date(startMillis))).append("\r\n")
-                append("DTEND:").append(utc.format(Date(endMillis))).append("\r\n")
-            }
-            append("END:VEVENT\r\nEND:VCALENDAR\r\n")
-        }
-        val url = resolve(ROOT, target).trimEnd('/') + "/" + uid + ".ics"
-        val req = Request.Builder().url(url)
-            .header("Authorization", Credentials.basic(email, password))
-            .header("If-None-Match", "*")
-            .put(body.toRequestBody(ICS))
-            .build()
-        client.newCall(req).execute().use { resp ->
-            if (resp.code == 401)
-                throw IllegalArgumentException("iCloud rejected the sign-in — reconnect with a fresh app-specific password")
-            if (resp.code !in 200..299)
-                throw IllegalArgumentException("iCloud refused the event (HTTP ${resp.code})")
-        }
-        return uid
+        return client(ctx).addEvent(target, title, startMillis, endMillis, allDay)
     }
 
     /**
@@ -131,119 +122,9 @@ object CalDav {
      */
     fun deleteByUid(ctx: Context, uid: String): Boolean {
         if (uid.isBlank()) return false
-        val email = email(ctx) ?: return false
-        val pw = prefs(ctx).getString("icloud_password", null) ?: return false
-        for (cal in calendars(ctx)) {
-            // Fast path: events we (and Apple's own clients) create live at
-            // {collection}/{uid}.ics. Try a direct DELETE first; a 404 just
-            // means "not at the convention URL" → fall through to the lookup.
-            // Encode the UID as a path segment — a feed UID can contain /, #, ?
-            // which would otherwise re-target the request at the wrong resource.
-            val direct = cal.href.trimEnd('/') + "/" + android.net.Uri.encode(uid) + ".ics"
-            if (tryDelete(direct, email, pw, treat404AsGone = false)) return true
-            // General path: locate the resource by UID (other clients name it
-            // differently), then DELETE it.
-            val href = queryHrefByUid(cal.href, email, pw, uid) ?: continue
-            if (tryDelete(resolve(cal.href, href), email, pw, treat404AsGone = true)) return true
-        }
-        return false
+        val c = runCatching { client(ctx) }.getOrNull() ?: return false
+        return c.deleteByUid(calendars(ctx).map { it.href }, uid)
     }
-
-    private fun tryDelete(url: String, email: String, pw: String, treat404AsGone: Boolean): Boolean = try {
-        val req = Request.Builder().url(url)
-            .header("Authorization", Credentials.basic(email, pw)).delete().build()
-        client.newCall(req).execute().use {
-            it.code in 200..299 || it.code == 410 || (treat404AsGone && it.code == 404)
-        }
-    } catch (e: Exception) { false }
-
-    /** First resource href matching UID in a calendar collection, or null. */
-    private fun queryHrefByUid(calUrl: String, email: String, pw: String, uid: String): String? {
-        val body = """<?xml version="1.0" encoding="utf-8"?>
-            <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
-            <d:prop><d:getetag/></d:prop>
-            <c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT">
-            <c:prop-filter name="UID"><c:text-match collation="i;octet">${xmlEscape(uid)}</c:text-match></c:prop-filter>
-            </c:comp-filter></c:comp-filter></c:filter></c:calendar-query>""".trimIndent()
-        val req = Request.Builder().url(calUrl)
-            .header("Authorization", Credentials.basic(email, pw))
-            .header("Depth", "1")
-            .method("REPORT", body.toRequestBody(XML))
-            .build()
-        val xml = client.newCall(req).execute().use { r ->
-            if (r.code !in 200..299 && r.code != 207) return null
-            r.body?.string() ?: return null
-        }
-        return Regex("<(?:\\w+:)?href[^>]*>([^<]+\\.ics)</", RegexOption.IGNORE_CASE)
-            .find(xml)?.groupValues?.get(1)?.trim()
-    }
-
-    private fun xmlEscape(s: String): String =
-        s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-    // ------------------------------------------------------------ plumbing
-
-    private fun dav(url: String, email: String, password: String, depth: Int, body: String): String {
-        val req = Request.Builder().url(url)
-            .header("Authorization", Credentials.basic(email, password))
-            .header("Depth", depth.toString())
-            .method("PROPFIND", body.toRequestBody(XML))
-            .build()
-        client.newCall(req).execute().use { resp ->
-            if (resp.code == 401)
-                throw IllegalArgumentException("iCloud sign-in failed (401) — use an app-specific password from account.apple.com, not the normal password")
-            if (resp.code !in 200..299 && resp.code != 207)
-                throw IllegalArgumentException("iCloud error HTTP ${resp.code}")
-            return resp.body?.string() ?: ""
-        }
-    }
-
-    /** First <elem>…<href>VALUE</href> in the response, namespace-prefix agnostic. */
-    private fun propfindHref(url: String, email: String, password: String, depth: Int,
-                             body: String, elem: String): String? {
-        val xml = dav(url, email, password, depth, body)
-        val m = Regex("<[^>]*$elem[^>]*>\\s*<[^>]*href[^>]*>([^<]+)</",
-            setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)).find(xml)
-        return m?.groupValues?.get(1)?.trim()
-    }
-
-    private fun listCalendars(homeUrl: String, email: String, password: String): List<CalInfo> {
-        val xml = dav(homeUrl, email, password, 1,
-            """<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
-               <d:prop><d:displayname/><d:resourcetype/><c:supported-calendar-component-set/></d:prop>
-               </d:propfind>""")
-        android.util.Log.i("PortalCalDAV", "calendar-home response (${xml.length} chars): " + xml.take(6000))
-        val out = ArrayList<CalInfo>()
-        for (m in Regex("<(?:\\w+:)?response[ >](.*?)</(?:\\w+:)?response>",
-                setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)).findAll(xml)) {
-            val block = m.groupValues[1]
-            // A real event calendar: resourcetype contains a CalDAV <calendar>
-            // element — which iCloud writes with an inline xmlns attribute, so
-            // accept anything after the element name. Excludes inbox/outbox/
-            // notifications (different element names) and Reminders lists
-            // (VTODO-only component set).
-            if (!Regex("<(?:\\w+:)?calendar[\\s/>]", RegexOption.IGNORE_CASE).containsMatchIn(block)) continue
-            if (block.contains("VTODO", ignoreCase = true) &&
-                !block.contains("VEVENT", ignoreCase = true)) continue
-            val href = Regex("<(?:\\w+:)?href[^>]*>([^<]+)</", RegexOption.IGNORE_CASE)
-                .find(block)?.groupValues?.get(1)?.trim() ?: continue
-            val name = Regex("<(?:\\w+:)?displayname[^>]*>([^<]*)</", RegexOption.IGNORE_CASE)
-                .find(block)?.groupValues?.get(1)?.trim()
-                .takeUnless { it.isNullOrEmpty() } ?: continue
-            out.add(CalInfo(unescapeXml(name), resolve(homeUrl, href)))
-        }
-        return out
-    }
-
-    private fun resolve(base: String, href: String): String =
-        if (href.startsWith("http")) href else URI(base).resolve(href).toString()
-
-    private fun unescapeXml(s: String): String = s
-        .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-        .replace("&quot;", "\"").replace("&#39;", "'").replace("&apos;", "'")
-
-    private fun escape(s: String): String = s
-        .replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
 
     /** Builds start/end millis from the config page's form fields (device tz). */
     fun eventWindow(date: String, time: String?, durationMins: Int, allDay: Boolean): Pair<Long, Long> {

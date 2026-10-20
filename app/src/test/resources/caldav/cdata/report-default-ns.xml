@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<multistatus xmlns="DAV:">
+<response>
+<href>/dav/work/standup.ics</href>
+<propstat>
+<prop>
+<getetag>"abc123"</getetag>
+<calendar-data xmlns="urn:ietf:params:xml:ns:caldav"><![CDATA[BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Portal Test//EN
+BEGIN:VEVENT
+UID:cdata-standup-001
+DTSTAMP:20261001T120000Z
+DTSTART:20261021T140000Z
+DTEND:20261021T143000Z
+SUMMARY:Stand-up & <planning> "daily"
+DESCRIPTION:keep ]]]]><![CDATA[> this intact &amp; do not decode &#13; here
+END:VEVENT
+END:VCALENDAR
+]]></calendar-data>
+</prop>
+<status>HTTP/1.1 200 OK</status>
+</propstat>
+</response>
+<response>
+<href>/dav/work/offsite.ics</href>
+<propstat>
+<prop>
+<C:calendar-data xmlns:C="urn:ietf:params:xml:ns:caldav"><![CDATA[BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Portal Test//EN
+BEGIN:VEVENT
+UID:cdata-offsite-001
+DTSTAMP:20261001T120000Z
+DTSTART;VALUE=DATE:20261105
+DTEND;VALUE=DATE:20261107
+SUMMARY:Offsite — Zürich
+END:VEVENT
+END:VCALENDAR
+]]></C:calendar-data>
+</prop>
+<status>HTTP/1.1 200 OK</status>
+</propstat>
+</response>
+</multistatus>

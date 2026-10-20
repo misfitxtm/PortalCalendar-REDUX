@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<multistatus xmlns="DAV:">
+<response>
+<href>/1234567890/calendars/</href>
+<propstat><prop><resourcetype><collection/></resourcetype></prop><status>HTTP/1.1 200 OK</status></propstat>
+</response>
+<response>
+<href>/1234567890/calendars/inbox/</href>
+<propstat><prop><displayname>Inbox</displayname><resourcetype><collection/><schedule-inbox xmlns="urn:ietf:params:xml:ns:caldav"/></resourcetype></prop><status>HTTP/1.1 200 OK</status></propstat>
+</response>
+<response>
+<href>/1234567890/calendars/home/</href>
+<propstat><prop><displayname>Home</displayname><resourcetype><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/></resourcetype><supported-calendar-component-set xmlns="urn:ietf:params:xml:ns:caldav"><comp name="VEVENT"/></supported-calendar-component-set><calendar-color xmlns="http://apple.com/ns/ical/">#1BADF8FF</calendar-color></prop><status>HTTP/1.1 200 OK</status></propstat>
+</response>
+<response>
+<href>/1234567890/calendars/2F6B1D0A-0000-4A4A-9999-ABCDEF012345/</href>
+<propstat><prop><displayname>Work</displayname><resourcetype><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/></resourcetype><supported-calendar-component-set xmlns="urn:ietf:params:xml:ns:caldav"><comp name="VEVENT"/></supported-calendar-component-set><calendar-color xmlns="http://apple.com/ns/ical/">#FF2968</calendar-color></prop><status>HTTP/1.1 200 OK</status></propstat>
+</response>
+<response>
+<href>/1234567890/calendars/reminders/</href>
+<propstat><prop><displayname>Reminders</displayname><resourcetype><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/></resourcetype><supported-calendar-component-set xmlns="urn:ietf:params:xml:ns:caldav"><comp name="VTODO"/></supported-calendar-component-set></prop><status>HTTP/1.1 200 OK</status></propstat>
+</response>
+<response>
+<href>/1234567890/notification/</href>
+<propstat><prop><displayname>notification</displayname><resourcetype><collection/><notification xmlns="http://calendarserver.org/ns/"/></resourcetype></prop><status>HTTP/1.1 200 OK</status></propstat>
+</response>
+</multistatus>

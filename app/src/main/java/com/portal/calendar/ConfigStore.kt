@@ -12,7 +12,12 @@ data class FeedConfig(
     /** "calendar" renders on the board; "inbox" = every event is a command. */
     val kind: String = "calendar",
     /** Text drawn on this calendar's solid color: "white" (default), "black" or "auto". */
-    val text: String = "white") {
+    val text: String = "white",
+    /**
+     * "ics" (default): [url] is a published iCal/webcal link. "caldav": [url] is a calendar
+     * collection on the connected CalDAV account, read with its credentials (see [CalDav.fetchIcs]).
+     */
+    val source: String = "ics") {
     /** The concrete text color for [text] on [color] (see [Palette.textOn]). */
     val textColor: Int get() = Palette.textOn(color, text)
 }
@@ -35,7 +40,7 @@ class ConfigStore(ctx: Context) {
             }
             out.add(FeedConfig(o.optString("name", "Calendar"), color, o.optString("url", ""),
                 if (o.optString("kind") == "inbox") "inbox" else "calendar",
-                cleanText(o.optString("text"))))
+                cleanText(o.optString("text")), cleanSource(o.optString("source"))))
         }
         return out
     }
@@ -49,14 +54,17 @@ class ConfigStore(ctx: Context) {
             val name = o.optString("name").trim()
             var url = o.optString("url").trim()
             val color = o.optString("color", "#58A6FF").trim()
+            val source = cleanSource(o.optString("source"))
             if (name.isEmpty()) throw IllegalArgumentException("calendar #${i + 1} has no name")
-            if (url.startsWith("webcal://")) url = "https://" + url.removePrefix("webcal://")
+            if (source == "ics" && url.startsWith("webcal://")) url = "https://" + url.removePrefix("webcal://")
             if (!url.startsWith("http://") && !url.startsWith("https://"))
                 throw IllegalArgumentException("\"$name\" has an invalid URL")
             Color.parseColor(color) // throws if bad
-            clean.put(JSONObject().put("name", name).put("color", color).put("url", url)
+            val entry = JSONObject().put("name", name).put("color", color).put("url", url)
                 .put("kind", if (o.optString("kind") == "inbox") "inbox" else "calendar")
-                .put("text", cleanText(o.optString("text"))))
+                .put("text", cleanText(o.optString("text")))
+            if (source == "caldav") entry.put("source", source) // ICS feeds are stored exactly as before
+            clean.put(entry)
         }
         prefs.edit().putString(KEY, clean.toString()).commit() // server thread: durable before the 200 reply
     }
@@ -175,5 +183,9 @@ class ConfigStore(ctx: Context) {
             "auto" -> "auto"
             else -> "white"
         }
+
+        /** A feed's source: "caldav" as given, anything else (or missing) = "ics". */
+        fun cleanSource(raw: String?): String =
+            if (raw?.trim()?.lowercase() == "caldav") "caldav" else "ics"
     }
 }

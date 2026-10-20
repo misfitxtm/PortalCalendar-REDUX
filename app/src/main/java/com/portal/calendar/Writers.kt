@@ -6,17 +6,21 @@ import org.json.JSONObject
 
 /**
  * Unified "where do new events go" layer over the two write backends
- * (iCloud CalDAV + Google Calendar API). The chosen target persists as
- * {kind, id} and event creation dispatches to the right backend.
+ * (CalDAV — iCloud or any other CalDAV server — + Google Calendar API). The
+ * chosen target persists as {kind, id} and event creation dispatches to the
+ * right backend. The CalDAV kind is still called "icloud" so saved targets
+ * from earlier versions keep matching.
  */
 object Writers {
     data class Cal(val kind: String, val id: String, val name: String)
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("config", Context.MODE_PRIVATE)
 
-    fun calendars(ctx: Context): List<Cal> =
-        CalDav.calendars(ctx).map { Cal("icloud", it.href, "${it.name} (iCloud)") } +
-        GoogleCal.calendars(ctx).map { Cal("google", it.first, "${it.second} (Google)") }
+    fun calendars(ctx: Context): List<Cal> {
+        val account = CalDav.label(ctx) // "iCloud" or "CalDAV"
+        return CalDav.calendars(ctx).map { Cal("icloud", it.href, "${it.name} ($account)") } +
+            GoogleCal.calendars(ctx).map { Cal("google", it.first, "${it.second} (Google)") }
+    }
 
     fun target(ctx: Context): Cal? {
         val raw = prefs(ctx).getString("write_target", null) ?: return null
@@ -43,7 +47,7 @@ object Writers {
 
     fun addEvent(ctx: Context, title: String, start: Long, end: Long, allDay: Boolean) {
         val t = target(ctx)
-            ?: throw IllegalArgumentException("connect iCloud or Google first (Two-way sync card)")
+            ?: throw IllegalArgumentException("connect iCloud, CalDAV or Google first (Two-way sync card)")
         when (t.kind) {
             "icloud" -> CalDav.addEventTo(ctx, t.id, title, start, end, allDay)
             "google" -> GoogleCal.addEvent(ctx, t.id, title, start, end, allDay)
@@ -69,11 +73,22 @@ object Writers {
         calendars(ctx).forEach {
             cals.put(JSONObject().put("kind", it.kind).put("id", it.id).put("name", it.name))
         }
+        // The CalDAV account's own calendars (plain names, with the server's colour when it sent one).
+        val account = JSONArray()
+        CalDav.calendars(ctx).forEach {
+            val o = JSONObject().put("name", it.name).put("href", it.href)
+            if (it.color != null) o.put("color", it.color)
+            account.put(o)
+        }
+        val connected = CalDav.isConnected(ctx)
         val t = target(ctx)
         return JSONObject()
-            .put("icloud", JSONObject()
-                .put("connected", CalDav.isConnected(ctx))
-                .put("email", CalDav.email(ctx) ?: ""))
+            .put("icloud", JSONObject() // key kept for the config page; this is the iCloud-or-CalDAV account
+                .put("connected", connected)
+                .put("email", CalDav.email(ctx) ?: "")
+                .put("isIcloud", !connected || runCatching { CalDav.isIcloud(ctx) }.getOrDefault(false))
+                .put("host", if (connected) runCatching { CalDav.host(ctx) }.getOrDefault("") else "")
+                .put("calendars", account))
             .put("google", JSONObject()
                 .put("connected", GoogleCal.isConnected(ctx))
                 .put("email", GoogleCal.email(ctx) ?: ""))
