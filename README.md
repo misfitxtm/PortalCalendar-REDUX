@@ -38,9 +38,12 @@ other in step over Wi-Fi — no account, no cloud.
   any `.ics`/`webcal://` URL. Recurring events, edited instances and cancellations
   handled properly. One color per person, with white, black or auto-contrast text —
   rename or recolor a calendar any time from the setup page, no need to re-add it.
+- **…or any CalDAV server** — connect a CalDAV account (iCloud, or your own
+  Nextcloud, Radicale, Baïkal, Fastmail…) and put its calendars on the board with one
+  tap, no share link needed. See [Connecting a CalDAV server](#connecting-a-caldav-server).
 - **Two-way event create *and delete*** — add events from the board (`+ Add`) or the
   setup page, and **remove an event by tapping it → 🗑 Remove**. Both write to the
-  *real* calendar (iCloud via CalDAV with an app-specific password, Google via its API
+  *real* calendar (iCloud or any CalDAV server with a password, Google via its API
   with your own OAuth client), so changes sync to everyone's phones natively. (Remove
   shows only for events on a connected account; a deleted event stays hidden on the
   board even while a slow secret-iCal feed catches up.)
@@ -171,6 +174,50 @@ the look (theme, layout, idle screen, size) and — if you have more than one �
 your Portals together. Every step is skippable and everything's changeable later. Add
 the page to your phone's home screen and it opens like an app.
 
+## Connecting a CalDAV server
+
+Besides iCloud, the **Settings → Two-way sync → iCloud or CalDAV** card connects any
+CalDAV server. One account per Portal.
+
+1. In the setup page open **Settings → Two-way sync**.
+2. **Server** — the server's CalDAV address (leave it blank for iCloud):
+
+   | Server | Address |
+   |---|---|
+   | Nextcloud | `https://HOST/remote.php/dav` |
+   | Radicale | `https://HOST/` — or on your home network `http://LAN-IP:5232/` |
+   | Baïkal | `https://HOST/dav.php` |
+   | Fastmail | `https://caldav.fastmail.com/` |
+
+   Typing just `HOST` also works (it assumes `https://`). If the exact path is wrong
+   but the server publishes the standard `/.well-known/caldav` redirect, that's tried
+   automatically.
+3. **Username** and **password** — Nextcloud and Fastmail need an **app password**
+   (created in their security settings), not your normal login.
+4. **Connect.** The account's calendars are listed; tap **Show on board** on the ones
+   you want. They appear on the board within ~15 minutes, or straight away with
+   **Sync the Portal now**. Recolor or rename them with ✎ like any other calendar.
+   Events added or removed from the Portal are written to the server too.
+
+Notes
+- Credentials are sent with HTTP Basic authentication, stored only on the Portal, and
+  included in the backup code. Use `https://` when you can: with a plain `http://`
+  address (handy for a Radicale on your LAN) the password crosses the network
+  unencrypted.
+- `https://` servers need a certificate Android already trusts; self-signed
+  certificates aren't accepted.
+- Disconnecting keeps the calendars on the board, but they stop updating (they keep
+  showing their last copy until you remove them).
+- **Tested:** [Radicale](https://radicale.org/) 3.8.3 — discovery (including the
+  `/.well-known/caldav` fallback), calendar list and colors, reading (a recurring
+  event with an edited instance comes back whole, non-ASCII titles survive, empty
+  calendars), adding and deleting events; automated against a local server (see
+  `CalDavClientRadicaleTest`). The Nextcloud, Baïkal and Fastmail addresses above are
+  the servers' standard CalDAV endpoints but **haven't been tried against live
+  installs**; the Nextcloud-style response parsing is covered by unit tests on a
+  hand-written fixture only. Baïkal's default login type is *Digest*, which isn't
+  supported — switch its WebDAV authentication to *Basic* in Baïkal's admin settings.
+
 ## Building from source
 
 JDK 21, Android SDK (compileSdk 36), Gradle wrapper included:
@@ -189,8 +236,10 @@ bootloader. The design works within that:
 
 - **Reading calendars** uses plain ICS feeds — the one auth-free universal interface —
   parsed with [biweekly](https://github.com/mangstadt/biweekly), including proper
-  `RECURRENCE-ID` override handling.
-- **Writing** uses real APIs: CalDAV for iCloud (OkHttp, because `HttpURLConnection`
+  `RECURRENCE-ID` override handling. A connected CalDAV account is read the same way:
+  a `calendar-query` REPORT returns the events in the board's window, which are fed
+  to the same parser.
+- **Writing** uses real APIs: CalDAV for iCloud and other CalDAV servers (OkHttp, because `HttpURLConnection`
   refuses the PROPFIND verb) and Google's Calendar/Tasks REST with a bring-your-own
   Desktop OAuth client (the sign-in dead-ends on a localhost URL you paste back —
   or swap `localhost` for the Portal's IP and the Portal finishes it itself).
@@ -214,7 +263,7 @@ bootloader. The design works within that:
 
 ## Privacy & security
 
-Calendar URLs, the iCloud app-specific password, Google OAuth tokens, and the
+Calendar URLs, the iCloud / CalDAV password, Google OAuth tokens, and the
 optional Gemini key live only in the app's private storage on the Portal. Treat
 secret calendar links like passwords. The setup page is unauthenticated by design —
 anyone on your Wi-Fi can open it — so treat your home network accordingly. The

@@ -253,7 +253,7 @@
   <div class="card" data-tab="calendar">
     <strong>Add an event</strong>
     <div id="eventOff" style="color:#737983;font-size:14px;margin-top:8px;">
-      Connect iCloud (below) to add events from this page — they sync back to the family calendar on everyone's devices.
+      Connect iCloud, CalDAV or Google (Settings → Two-way sync) to add events from this page — they sync back to the family calendar on everyone's devices.
     </div>
     <div id="eventForm" style="display:none;">
       <label for="evTitle">What</label>
@@ -308,6 +308,7 @@
 
   <div class="card" data-tab="calendar">
     <strong>Add a calendar</strong>
+    <div style="font-size:13px;color:#737983;margin:6px 0 4px;">On Nextcloud, Radicale, Fastmail or another CalDAV server — or iCloud with an app-specific password? Connect the account under Settings → Two-way sync and pick its calendars there; no link needed.</div>
     <label for="name">Person / calendar name</label>
     <input type="text" id="name" placeholder="e.g. Moshe" autocomplete="off">
     <label for="url">Calendar link (Google secret address or Apple public link — how-to below)</label>
@@ -509,20 +510,24 @@
 
   <div class="card" data-tab="settings">
     <strong>Two-way sync</strong>
-    <p style="font-size:13px;color:#737983;margin:6px 0 10px;">Connect an account so events can be added from this page. Events are created in the real calendar, so they sync to everyone's devices.</p>
+    <p style="font-size:13px;color:#737983;margin:6px 0 10px;">Connect an account so events can be added from this page. Events are created in the real calendar, so they sync to everyone's devices. A CalDAV account can also feed its calendars straight to the board.</p>
 
-    <div style="font-weight:600;">iCloud</div>
+    <div style="font-weight:600;">iCloud or CalDAV</div>
     <div id="icDisconnected" style="display:none;">
-      <label for="icEmail">Apple ID</label>
-      <input type="text" id="icEmail" placeholder="name@icloud.com" autocomplete="off">
-      <label for="icPass">App-specific password</label>
+      <label for="icServer">Server <span style="color:#a3a8b0;">(optional)</span></label>
+      <input type="text" id="icServer" placeholder="Leave blank for iCloud — or e.g. https://cloud.example.com/remote.php/dav" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <label for="icEmail">Apple ID / username</label>
+      <input type="text" id="icEmail" placeholder="name@icloud.com" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <label for="icPass">App-specific password / password</label>
       <input type="text" id="icPass" placeholder="xxxx-xxxx-xxxx-xxxx" autocomplete="off">
-      <div style="font-size:13px;color:#737983;margin-bottom:10px;">Create one at <a href="https://account.apple.com" target="_blank" rel="noopener">account.apple.com</a> → Sign-In and Security → App-Specific Passwords. It's stored on the Portal only and can be revoked anytime.</div>
-      <button class="ghost" style="width:100%;" onclick="connectIcloud()">Connect iCloud</button>
+      <div style="font-size:13px;color:#737983;margin-bottom:10px;"><strong>iCloud:</strong> leave Server blank and create an app-specific password at <a href="https://account.apple.com" target="_blank" rel="noopener">account.apple.com</a> → Sign-In and Security → App-Specific Passwords.<br><strong>Nextcloud, Radicale, Baïkal, Fastmail, Synology…:</strong> enter the server's CalDAV address, your username and password (Nextcloud and Fastmail need an app password you create in their settings). Use <code>https://</code> where you can — plain <code>http://</code> (fine for a server on your own Wi-Fi) sends the password unencrypted. Everything is stored on the Portal only and can be revoked anytime.</div>
+      <button class="ghost" style="width:100%;" onclick="connectIcloud()">Connect</button>
     </div>
     <div id="icConnected" style="display:none;font-size:14px;margin:8px 0;">
       Connected as <strong id="icWho"></strong>
       <button class="ghost" style="padding:6px 12px;margin-left:8px;" onclick="disconnectIcloud()">Disconnect</button>
+      <div id="icCals"></div>
+      <div style="font-size:13px;color:#737983;margin-top:10px;">Disconnecting keeps your calendars on the board, but any shown from this account will stop updating.</div>
     </div>
     <div id="icMsg" class="msgline"></div>
 
@@ -613,6 +618,8 @@ let feeds = [];
 
 let editing = -1;   // index of the calendar row being edited inline (-1 = none)
 let editBusy = false;
+let feedsLoaded = false;   // save() posts the whole list, so never save before it has been read
+let icBusy = false;
 
 function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 
@@ -641,15 +648,23 @@ function addPreview(){
         document.getElementById('color').value, document.getElementById('calText').value);
 }
 
+// A calendar read through the connected CalDAV account (source 'caldav') is shown by its server,
+// not by its long collection address.
+function feedSub(f){
+  if (f.source !== 'caldav') return f.url;
+  try { return new URL(f.url).hostname; } catch(e){ return 'CalDAV account'; }
+}
+
 function render(){
+  renderIcCals();   // the account's "Show on board" buttons track which calendars are listed here
   const list = document.getElementById('list');
   if (!feeds.length) { list.innerHTML = '<div class="empty">No calendars yet — add one below</div>'; return; }
   list.innerHTML = feeds.map((f,i)=> i === editing ? editorRow(i, f) : `
     <div class="cal-row">
       <div class="dot aa" style="background:${esc(f.color)};color:${textOn(f.color, f.text)}">Aa</div>
       <div class="grow">
-        <div class="cal-name">${esc(f.name)}${f.kind === 'inbox' ? ' <span style="font-size:12px;color:#f0584c;">📥 inbox</span>' : ''}</div>
-        <div class="cal-url">${esc(f.url)}</div>
+        <div class="cal-name">${esc(f.name)}${f.kind === 'inbox' ? ' <span style="font-size:12px;color:#f0584c;">📥 inbox</span>' : ''}${f.source === 'caldav' ? ' <span style="font-size:12px;color:#737983;background:#efece4;border-radius:6px;padding:1px 7px;">CalDAV</span>' : ''}</div>
+        <div class="cal-url">${esc(feedSub(f))}</div>
       </div>
       <button class="edit" onclick="editCal(${i})" aria-label="Edit">✎</button>
       <button class="del" onclick="removeCal(${i})" aria-label="Remove">✕</button>
@@ -677,7 +692,7 @@ function editorRow(i, f){
             <option value="auto">Auto</option>
           </select>
         </div>
-        <div class="cal-url" style="margin-bottom:10px;">${esc(f.url)}</div>
+        <div class="cal-url" style="margin-bottom:10px;">${esc(feedSub(f))}</div>
         <div class="btnrow">
           <button onclick="saveEdit(${i})">Save</button>
           <button class="ghost" onclick="cancelEdit()">Cancel</button>
@@ -708,6 +723,7 @@ function msg(text, ok){ show('msg', text, ok); }
 async function load(){
   try {
     feeds = await (await fetch('/api/config')).json();
+    feedsLoaded = true;
     document.getElementById('color').value = PALETTE[feeds.length % PALETTE.length];
     addPreview();
     render();
@@ -910,7 +926,10 @@ function applyWriters(st){
   writers = st;
   document.getElementById('icDisconnected').style.display = st.icloud.connected ? 'none' : 'block';
   document.getElementById('icConnected').style.display = st.icloud.connected ? 'block' : 'none';
-  if (st.icloud.connected) document.getElementById('icWho').textContent = st.icloud.email;
+  if (st.icloud.connected)
+    document.getElementById('icWho').textContent = st.icloud.isIcloud || !st.icloud.host
+      ? st.icloud.email : st.icloud.email + ' @ ' + st.icloud.host;
+  renderIcCals();
   document.getElementById('gDisconnected').style.display = st.google.connected ? 'none' : 'block';
   document.getElementById('gConnected').style.display = st.google.connected ? 'block' : 'none';
   if (st.google.connected) document.getElementById('gWho').textContent = st.google.email || 'Google account';
@@ -938,23 +957,70 @@ async function loadWriters(){
 }
 
 async function connectIcloud(){
+  const server = document.getElementById('icServer').value.trim();   // blank = iCloud
   const email = document.getElementById('icEmail').value.trim();
   const password = document.getElementById('icPass').value.trim();
-  if (!email || !password) return show('icMsg', 'Enter the Apple ID and an app-specific password', false);
-  show('icMsg', 'Connecting to iCloud…', true);
+  if (!email || !password)
+    return show('icMsg', server ? 'Enter the username and password' : 'Enter the Apple ID and an app-specific password', false);
+  show('icMsg', server ? 'Connecting to ' + server + '…' : 'Connecting to iCloud…', true);
   try {
-    const r = await fetch('/api/icloud/connect', {method:'POST', body: JSON.stringify({email, password})});
+    const r = await fetch('/api/icloud/connect', {method:'POST', body: JSON.stringify({server, email, password})});
     const body = await r.json();
     if (!r.ok) throw new Error(body.error || 'connection failed');
     document.getElementById('icPass').value = '';
     applyWriters(body);
-    show('icMsg', '✓ iCloud connected', true);
+    show('icMsg', '✓ Connected', true);
   } catch(e){ show('icMsg', e.message, false); }
 }
 
 async function disconnectIcloud(){
+  const n = feeds.filter(f => f.source === 'caldav').length;
+  if (n && !confirm('Disconnect this account? The ' + (n === 1 ? 'calendar' : n + ' calendars') +
+        ' on the board from it will stop updating (they stay listed until you remove them).')) return;
   try { await fetch('/api/icloud/disconnect', {method:'POST'}); } catch(e){}
   loadWriters();
+}
+
+// The connected account's calendars, each with a button that puts it on the board.
+function renderIcCals(){
+  const box = document.getElementById('icCals');
+  const ic = writers.icloud;
+  const cals = (ic && ic.connected && ic.calendars) || [];
+  box.innerHTML = !cals.length ? '' :
+    '<div style="font-size:13px;color:#737983;margin:12px 0 2px;">Calendars on this account</div>' +
+    cals.map((c, i) => {
+      const on = feeds.some(f => f.source === 'caldav' && f.url === c.href);
+      return `
+    <div class="cal-row">
+      <div class="dot" style="background:${esc(c.color || '#c8c3b6')}"></div>
+      <div class="grow cal-name">${esc(c.name)}</div>
+      ${on ? '<span style="color:#2e9e4f;font-size:13px;white-space:nowrap;">✓ On board</span>'
+           : `<button class="ghost" style="padding:6px 12px;flex:none;" onclick="showOnBoard(${i})">Show on board</button>`}
+    </div>`;
+    }).join('');
+}
+
+// Adds one of the account's calendars as a board calendar (same validate + save path as addCal).
+async function showOnBoard(i){
+  const c = ((writers.icloud || {}).calendars || [])[i];
+  if (!c || icBusy) return;
+  if (!feedsLoaded) return show('icMsg', 'Still loading your calendars — try again in a moment', false);
+  if (feeds.some(f => f.source === 'caldav' && f.url === c.href)) return;
+  icBusy = true;
+  show('icMsg', 'Checking ' + c.name + '…', true);
+  try {
+    const r = await fetch('/api/validate', {method:'POST', body: JSON.stringify({url: c.href, source: 'caldav'})});
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || 'check failed');
+    feeds.push({name: c.name, color: c.color || PALETTE[feeds.length % PALETTE.length], url: c.href,
+                kind: 'calendar', text: 'white', source: 'caldav'});
+    try { await save(); } catch(e){ feeds.pop(); throw e; }
+    document.getElementById('color').value = PALETTE[feeds.length % PALETTE.length];
+    addPreview();
+    render();
+    show('icMsg', '✓ ' + c.name + ' is on the board — found ' + body.events + ' events, the Portal is syncing', true);
+  } catch(e){ show('icMsg', e.message, false); }
+  finally { icBusy = false; }
 }
 
 async function googleBegin(){
