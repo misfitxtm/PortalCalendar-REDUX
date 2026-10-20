@@ -284,6 +284,94 @@ END:VCALENDAR]]></caldav:calendar-data>
             } catch (e: IllegalArgumentException) { /* expected */ }
     }
 
+    // ------------------------------------------------------------ delete-by-UID lookup
+
+    @Test fun exactUidMatchPicksOnlyTheExactResource() {
+        // Captured from Radicale: the text-match pre-filter for "evt-1" returned BOTH events,
+        // evt-10 (a-ten.ics) first. Picking the first href would delete the wrong event.
+        val xml = fixture("radicale/report-uid-substring.xml")
+        assertEquals(listOf("/alice/uidtest/a-ten.ics", "/alice/uidtest/b-one.ics"),
+            Regex("<href>([^<]+)</href>").findAll(xml).map { it.groupValues[1] }.toList()) // both came back
+        assertEquals(listOf("/alice/uidtest/b-one.ics"), CalDavXml.hrefsWithExactUid(xml, "evt-1"))
+        assertEquals(listOf("/alice/uidtest/a-ten.ics"), CalDavXml.hrefsWithExactUid(xml, "evt-10"))
+        // prefixes, supersets and other-case variants of a UID are not that UID
+        for (other in listOf("evt", "evt-", "evt-100", "EVT-1", "evt-1 ", "vt-1"))
+            assertTrue(other, CalDavXml.hrefsWithExactUid(xml, other).isEmpty())
+    }
+
+    @Test fun uidEdgeCases() {
+        val xml = fixture("nextcloud/report-uid-edge-cases.xml")
+        val base = "/remote.php/dav/calendars/alice/personal/"
+        fun find(uid: String) = CalDavXml.hrefsWithExactUid(xml, uid)
+
+        // a folded UID line is matched as the whole UID, never as its first physical line
+        assertEquals(listOf(base + "folded.ics"),
+            find("folded-uid-with-a-long-name-that-the-server-wrapped-at-seventy-five-characters-0001"))
+        assertTrue(find("folded-uid-with-a-long-name-that-the-server-wrapped-at-seventy-five-ch").isEmpty())
+
+        // UIDs of a VALARM or a VTODO inside the resource are not event UIDs
+        assertEquals(listOf(base + "alarm.ics"), find("alarm-owner"))
+        assertTrue(find("alarm-inner-uid").isEmpty())
+        assertTrue(find("todo-uid").isEmpty())
+
+        // master + edited instance share a UID and one resource: one href
+        assertEquals(listOf(base + "series.ics"), find("series-1"))
+
+        // TEXT escapes and a quoted parameter containing ':' are handled
+        assertEquals(listOf(base + "escaped.ics"), find("team, a;b"))
+        assertEquals(listOf(base + "escaped.ics"), find("team\\, a\\;b"))
+
+        assertEquals(listOf(base + "cdata.ics"), find("cdata-uid"))
+        assertTrue(find("nodata").isEmpty()) // the 404 propstat resource never matches
+    }
+
+    @Test fun eventUidsReadsFoldedLinesWithAnyLineEnding() {
+        val ics = "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:abc\n def\n\tghi\nEND:VEVENT\r\nBEGIN:vevent\rUID:second\rEND:vevent\r"
+        assertEquals(setOf("abcdefghi", "second"), CalDavXml.eventUids(ics))
+        assertTrue(CalDavXml.eventUids("BEGIN:VCALENDAR\nEND:VCALENDAR").isEmpty())
+        assertTrue(CalDavXml.eventUids("UID:outside-any-event").isEmpty())
+        assertTrue(CalDavXml.eventUids("").isEmpty())
+    }
+
+    // ------------------------------------------------------------ which URLs get the credentials
+
+    @Test fun credentialsGoOnlyToTheConnectedServerOrItsCalendarHosts() {
+        val server = "https://cloud.example.com/remote.php/dav"
+        val hrefs = listOf("https://cloud.example.com/remote.php/dav/calendars/alice/personal/")
+        fun ok(url: String) = CalDavXml.isOnAccount(url, server, hrefs)
+
+        assertTrue(ok("https://cloud.example.com/remote.php/dav/calendars/alice/personal/"))
+        assertTrue(ok("https://cloud.example.com/some/other/path/")) // same origin, any path
+        assertTrue(ok("HTTPS://CLOUD.EXAMPLE.COM:443/x/")) // case and the default port don't matter
+
+        assertFalse(ok("https://evil.example.net/remote.php/dav/calendars/alice/personal/"))
+        assertFalse(ok("https://cloud.example.com.evil.net/"))
+        assertFalse(ok("https://evil.net/cloud.example.com/"))
+        assertFalse(ok("https://cloud.example.com@evil.net/")) // userinfo trick: the host is evil.net
+        assertFalse(ok("http://cloud.example.com/remote.php/dav/")) // a different scheme isn't the same origin
+        assertFalse(ok("https://cloud.example.com:8443/remote.php/dav/")) // nor is a different port
+        assertFalse(ok("https://example.com/"))
+        for (junk in listOf("", "not a url", "/relative/path/", "ftp://cloud.example.com/", "https://"))
+            assertFalse(junk, ok(junk))
+    }
+
+    @Test fun icloudShardHostsComeFromTheStoredCalendars() {
+        val hrefs = listOf(
+            "https://p41-caldav.icloud.com:443/1234567890/calendars/home/",
+            "https://p41-caldav.icloud.com/1234567890/calendars/work/")
+        fun ok(url: String) = CalDavXml.isOnAccount(url, CalDavXml.ICLOUD_ROOT, hrefs)
+        assertTrue(ok("https://caldav.icloud.com/1234567890/calendars/home/"))
+        assertTrue(ok("https://p41-caldav.icloud.com/1234567890/calendars/home/"))
+        assertFalse(ok("https://p42-caldav.icloud.com/1234567890/calendars/home/")) // a shard this account never listed
+        assertFalse(ok("https://icloud.com.evil.net/"))
+        // with no calendars stored yet only the root itself qualifies
+        assertTrue(CalDavXml.isOnAccount("https://caldav.icloud.com/x/", CalDavXml.ICLOUD_ROOT, emptyList()))
+        assertFalse(CalDavXml.isOnAccount("https://p41-caldav.icloud.com/x/", CalDavXml.ICLOUD_ROOT, emptyList()))
+        // a LAN server on a non-default port
+        assertTrue(CalDavXml.isOnAccount("http://192.168.1.20:5232/alice/family/", "http://192.168.1.20:5232/", emptyList()))
+        assertFalse(CalDavXml.isOnAccount("http://192.168.1.20:5233/alice/family/", "http://192.168.1.20:5232/", emptyList()))
+    }
+
     // ------------------------------------------------------------ the tiny XML toolkit
 
     @Test fun elementsIgnoreMarkupInCommentsCdataAndQuotedAttributes() {

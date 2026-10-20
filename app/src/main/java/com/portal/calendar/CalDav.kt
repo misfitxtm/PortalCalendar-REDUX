@@ -99,8 +99,13 @@ object CalDav {
      * window the board expands recurring events over.
      */
     fun fetchIcs(ctx: Context, calendarHref: String): String {
+        val client = client(ctx)
+        // A feed's address is user-supplied and /api/config is open to the LAN, so the stored
+        // credentials only go to the connected server (or a host it handed us a calendar on).
+        if (!CalDavXml.isOnAccount(calendarHref, server(ctx), calendars(ctx).map { it.href }))
+            throw IllegalArgumentException("not on the connected CalDAV account")
         val now = System.currentTimeMillis()
-        return client(ctx).fetchIcs(calendarHref,
+        return client.fetchIcs(calendarHref,
             now - SyncManager.WINDOW_PAST_DAYS * SyncManager.DAY_MS,
             now + SyncManager.WINDOW_FUTURE_DAYS * SyncManager.DAY_MS)
     }

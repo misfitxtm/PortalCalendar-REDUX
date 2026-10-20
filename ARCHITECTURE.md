@@ -291,8 +291,9 @@ a physical, discontinued consumer device on the user's home network.
 
 - **Auth model — external services:** OAuth2 for Google (user's own Desktop
   client + refresh token), an Apple **app-specific password** for iCloud CalDAV
-  (or a username + password for another CalDAV server, sent as HTTP Basic),
-  a user-supplied **API key** for Gemini. Calendar feed URLs are bearer-secret
+  (or a username + password for another CalDAV server, sent as HTTP Basic, and
+  only to the connected server's origin or the hosts it listed calendars on —
+  `CalDavXml.isOnAccount`), a user-supplied **API key** for Gemini. Calendar feed URLs are bearer-secret
   (treated like passwords).
 - **Auth model — the config server:** **unauthenticated by design.** Anyone on
   the same Wi-Fi can open `http://<portal-ip>:8090`. The threat model assumes a

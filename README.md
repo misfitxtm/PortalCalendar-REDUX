@@ -204,6 +204,9 @@ Notes
   included in the backup code. Use `https://` when you can: with a plain `http://`
   address (handy for a Radicale on your LAN) the password crosses the network
   unencrypted.
+- The password is only ever sent to the server you connected (and the hosts it listed
+  your calendars on, e.g. iCloud's `pNN-caldav` servers) — a board calendar whose
+  address points anywhere else is refused rather than sent your credentials.
 - `https://` servers need a certificate Android already trusts; self-signed
   certificates aren't accepted.
 - Disconnecting keeps the calendars on the board, but they stop updating (they keep

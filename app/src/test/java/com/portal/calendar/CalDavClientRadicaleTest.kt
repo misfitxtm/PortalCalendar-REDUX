@@ -198,6 +198,49 @@ class CalDavClientRadicaleTest {
         assertFalse(ev.dateStart.value.hasTime())
     }
 
+    private fun putEvent(href: String, uid: String, summary: String) {
+        val ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Portal Test//EN\r\nBEGIN:VEVENT\r\nUID:$uid\r\n" +
+            "DTSTAMP:20261001T120000Z\r\nDTSTART:20261201T150000Z\r\nDTEND:20261201T160000Z\r\n" +
+            "SUMMARY:$summary\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        assertEquals("PUT $href", 201, send("PUT", href, ics, "text/calendar"))
+    }
+
+    private fun uidsOnServer(): Set<String> =
+        Biweekly.parse(client().fetchIcs(familyHref, winStart, winEnd)).all().flatMap { it.events }
+            .map { it.uid.value }.toSet()
+
+    @Test fun deleteNeverTouchesAnEventWhoseUidOnlyContainsTheTarget() {
+        // Neither resource is named after its UID, so deletes go through the UID lookup — whose
+        // text-match is a substring match. a-ten.ics (evt-10) sorts before b-one.ics (evt-1).
+        putEvent(familyHref + "a-ten.ics", "evt-10", "Ten")
+        putEvent(familyHref + "b-one.ics", "evt-1", "One")
+
+        // Precondition that makes this test meaningful: the server's own filter returns both.
+        val raw = http.newCall(Request.Builder().url(familyHref)
+            .header("Authorization", Credentials.basic(user, password)).header("Depth", "1")
+            .method("REPORT", """<c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+                <d:prop><d:getetag/></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT">
+                <c:prop-filter name="UID"><c:text-match collation="i;octet">evt-1</c:text-match></c:prop-filter>
+                </c:comp-filter></c:comp-filter></c:filter></c:calendar-query>""".toRequestBody("application/xml".toMediaType()))
+            .build()).execute().use { it.body!!.string() }
+        assertTrue(raw, raw.contains("a-ten.ics") && raw.contains("b-one.ics"))
+
+        val c = client()
+        assertFalse(c.deleteByUid(listOf(familyHref), "evt")) // matches both by substring, is neither
+        assertTrue(uidsOnServer().containsAll(listOf("evt-1", "evt-10")))
+
+        assertTrue(c.deleteByUid(listOf(familyHref), "evt-1"))
+        val afterOne = uidsOnServer()
+        assertFalse("evt-1 should be gone", "evt-1" in afterOne)
+        assertTrue("evt-10 must survive deleting evt-1", "evt-10" in afterOne)
+
+        assertFalse(c.deleteByUid(listOf(familyHref), "evt-1")) // already gone: must not fall through to evt-10
+        assertTrue("evt-10" in uidsOnServer())
+
+        assertTrue(c.deleteByUid(listOf(familyHref), "evt-10"))
+        assertTrue(uidsOnServer().none { it.startsWith("evt-") })
+    }
+
     @Test fun deleteFindsEventsThatAreNotAtTheUidUrl() {
         // dentist.ics holds UID dentist-001, so {collection}/dentist-001.ics is a 404:
         // the delete must fall through to the calendar-query lookup.

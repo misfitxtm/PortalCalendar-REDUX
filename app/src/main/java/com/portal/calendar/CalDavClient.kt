@@ -143,9 +143,9 @@ class CalDavClient(private val server: String, private val user: String, passwor
             val direct = calHref.trimEnd('/') + "/" + encodeSegment(uid) + ".ics"
             if (tryDelete(direct, treat404AsGone = false)) return true
             // General path: locate the resource by UID (other clients name it
-            // differently), then DELETE it.
-            val href = queryHrefByUid(calHref, uid) ?: continue
-            if (tryDelete(CalDavXml.resolve(calHref, href), treat404AsGone = true)) return true
+            // differently), then DELETE it. Only resources whose UID matches exactly.
+            for (href in hrefsByUid(calHref, uid))
+                if (tryDelete(CalDavXml.resolve(calHref, href), treat404AsGone = true)) return true
         }
         return false
     }
@@ -156,11 +156,16 @@ class CalDavClient(private val server: String, private val user: String, passwor
         execute(req) { it.code in 200..299 || it.code == 410 || (treat404AsGone && it.code == 404) }
     } catch (e: Exception) { false }
 
-    /** First resource href matching UID in a calendar collection, or null. */
-    private fun queryHrefByUid(calUrl: String, uid: String): String? {
+    /**
+     * Hrefs of the resources in a calendar collection whose VEVENT has exactly this UID.
+     * The REPORT's `text-match` is a *substring* match (UID `evt-1` also finds `evt-10`),
+     * so it only narrows the search: calendar-data is requested too and each candidate's
+     * UID is compared exactly, to never delete a different event.
+     */
+    private fun hrefsByUid(calUrl: String, uid: String): List<String> {
         val body = """<?xml version="1.0" encoding="utf-8"?>
             <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
-            <d:prop><d:getetag/></d:prop>
+            <d:prop><d:getetag/><c:calendar-data/></d:prop>
             <c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT">
             <c:prop-filter name="UID"><c:text-match collation="i;octet">${xmlEscape(uid)}</c:text-match></c:prop-filter>
             </c:comp-filter></c:comp-filter></c:filter></c:calendar-query>""".trimIndent()
@@ -170,11 +175,10 @@ class CalDavClient(private val server: String, private val user: String, passwor
             .method("REPORT", body.toRequestBody(XML))
             .build()
         val xml = http.newCall(req).execute().use { r ->
-            if (r.code !in 200..299 && r.code != 207) return null
-            r.body?.string() ?: return null
+            if (r.code !in 200..299 && r.code != 207) return emptyList()
+            r.body?.string() ?: return emptyList()
         }
-        return Regex("<(?:\\w+:)?href[^>]*>([^<]+\\.ics)</", RegexOption.IGNORE_CASE)
-            .find(xml)?.groupValues?.get(1)?.trim()
+        return CalDavXml.hrefsWithExactUid(xml, uid)
     }
 
     // ------------------------------------------------------------ plumbing

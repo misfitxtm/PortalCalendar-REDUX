@@ -170,6 +170,99 @@ object CalDavXml {
         return if (parts.isEmpty()) EMPTY_CALENDAR else parts.joinToString("\r\n", postfix = "\r\n")
     }
 
+    /**
+     * Hrefs of the resources in a calendar-query multistatus whose VEVENT has UID exactly
+     * [uid]. The query's UID `text-match` is only a pre-filter — CalDAV defines it as a
+     * substring match, so asking for `evt-1` also returns `evt-10` — which is why the
+     * reply must include `calendar-data` and every candidate is checked here.
+     */
+    fun hrefsWithExactUid(xml: String, uid: String): List<String> {
+        val out = ArrayList<String>()
+        for (resp in elements(xml, "response")) {
+            val href = elements(resp.inner, "href").firstOrNull()?.let { text(it.inner).trim() }
+                ?.takeIf { it.isNotEmpty() } ?: continue
+            val has = elements(okProps(resp.inner), "calendar-data")
+                .any { uid in eventUids(text(it.inner, stripTags = false)) }
+            if (has && href !in out) out.add(href)
+        }
+        return out
+    }
+
+    /**
+     * The UID of every VEVENT in iCalendar text, after unfolding continuation lines. Only
+     * the VEVENT's own UID counts (not a nested VALARM's). Each UID is listed as written
+     * and with TEXT escapes (`\,` `\;` `\\` `\n`) resolved, so it matches however the
+     * caller learned the UID.
+     */
+    fun eventUids(ics: String): Set<String> {
+        val uids = LinkedHashSet<String>()
+        val stack = ArrayList<String>()
+        for (line in ics.replace(Regex("\r?\n[ \t]|\r[ \t]"), "").split(Regex("\r\n|\n|\r"))) {
+            val colon = valueColon(line)
+            if (colon < 0) continue
+            val name = line.substring(0, colon).substringBefore(';').trim().uppercase()
+            val value = line.substring(colon + 1)
+            when {
+                name == "BEGIN" -> stack.add(value.trim().uppercase())
+                name == "END" -> {
+                    val at = stack.lastIndexOf(value.trim().uppercase())
+                    if (at >= 0) while (stack.size > at) stack.removeAt(stack.size - 1)
+                }
+                name == "UID" && stack.lastOrNull() == "VEVENT" -> {
+                    uids.add(value)
+                    uids.add(unescapeIcalText(value))
+                }
+            }
+        }
+        return uids
+    }
+
+    /** Index of the `:` that ends a content line's name and parameters (ignoring colons inside quoted parameter values). */
+    private fun valueColon(line: String): Int {
+        var quoted = false
+        for (i in line.indices) {
+            val c = line[i]
+            if (c == '"') quoted = !quoted
+            else if (c == ':' && !quoted) return i
+        }
+        return -1
+    }
+
+    private fun unescapeIcalText(s: String): String {
+        if (s.indexOf('\\') < 0) return s
+        val sb = StringBuilder(s.length)
+        var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            if (c == '\\' && i + 1 < s.length) {
+                when (val n = s[i + 1]) {
+                    'n', 'N' -> sb.append('\n')
+                    ',', ';', '\\' -> sb.append(n)
+                    else -> sb.append(c).append(n)
+                }
+                i += 2
+            } else {
+                sb.append(c)
+                i++
+            }
+        }
+        return sb.toString()
+    }
+
+    /**
+     * Whether [url] is on the connected account: same scheme, host and port as the server
+     * root [server], or as one of the account's calendar hrefs [calendarHrefs] (iCloud
+     * keeps calendars on per-account shard hosts such as p41-caldav.icloud.com). Used to
+     * keep the stored credentials from being sent to a feed-supplied address anywhere else.
+     */
+    fun isOnAccount(url: String, server: String, calendarHrefs: List<String>): Boolean {
+        val target = url.trim().toHttpUrlOrNull() ?: return false
+        return (listOf(server) + calendarHrefs).any { known ->
+            val k = known.toHttpUrlOrNull()
+            k != null && k.scheme == target.scheme && k.host == target.host && k.port == target.port
+        }
+    }
+
     private fun lastSegment(url: String): String {
         val seg = url.substringBefore('?').trimEnd('/').substringAfterLast('/')
         val decoded = try { URLDecoder.decode(seg.replace("+", "%2B"), "UTF-8") } catch (e: Exception) { seg }
