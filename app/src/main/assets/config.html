@@ -474,6 +474,10 @@
       <option value="portrait">Portrait</option>
       <option value="auto">Auto-rotate</option>
     </select>
+    <div id="orientSwapRow" style="display:none;margin-top:8px;">
+      <label style="display:flex;align-items:center;gap:10px;font-size:15px;"><input type="checkbox" id="orientSwap" onchange="saveLayout()" style="width:20px;height:20px;flex:none;"> Swap auto-rotate direction</label>
+      <div style="font-size:13px;color:#737983;margin-top:4px;">Turns the wrong way on your model? Tick this.</div>
+    </div>
     <label for="theme" style="margin-top:10px;">Theme</label>
     <select id="theme" style="width:100%;" onchange="saveLayout()">
       <option value="light">Light</option>
@@ -2138,14 +2142,23 @@ async function loadLayout(){
     document.getElementById('weekStart').value = l.weekStart;
     document.getElementById('defaultView').value = l.defaultView;
     document.getElementById('orientation').value = l.orientation;
+    document.getElementById('orientSwap').checked = !!l.orientationSwap;
     document.getElementById('theme').value = l.theme;
+    updateOrientSwapRow();
   } catch(e){}
 }
+// The swap box only means something while Auto-rotate is selected.
+function updateOrientSwapRow(){
+  document.getElementById('orientSwapRow').style.display =
+    document.getElementById('orientation').value === 'auto' ? 'block' : 'none';
+}
 async function saveLayout(){
+  updateOrientSwapRow();
   const body = {
     weekStart: parseInt(document.getElementById('weekStart').value),
     defaultView: parseInt(document.getElementById('defaultView').value),
     orientation: document.getElementById('orientation').value,
+    orientationSwap: document.getElementById('orientSwap').checked,
     theme: document.getElementById('theme').value
   };
   try {

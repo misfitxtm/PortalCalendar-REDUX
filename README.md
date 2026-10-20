@@ -135,7 +135,8 @@ and no account — just your Wi-Fi.
 
 - Meta Portal+ gen 1 (`aloha`, Android 9 / API 28) with **ADB enabled** and the
   [Immortal launcher](https://github.com/starbrightlab/immortal) provisioned.
-  Other Portal models are untested — reports welcome.
+  The Portal (Gen 2) 10″ has been reported working by a user; other Portal models
+  are untested — reports welcome.
 - A computer with `adb` for the one-time install.
 - Wi-Fi shared by the Portal and your phones.
 

@@ -52,7 +52,8 @@ object FamilySync {
     /** Prefs that must survive a full-mirror import — sync identity + this device's physical traits. */
     private val LOCAL_PREFS = setOf(
         "sync_role", "sync_hub_manual", "sync_mirror_all", "sync_full_hash",
-        "idle_mode", "idle_yield_min", "idle_takeover", "ui_scale", "orientation")
+        "idle_mode", "idle_yield_min", "idle_takeover", "ui_scale", "orientation",
+        "orientation_swap")
 
     private val pushExec = Executors.newSingleThreadExecutor()
     private val pullExec = Executors.newSingleThreadExecutor()
