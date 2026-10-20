@@ -45,8 +45,12 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
             val feeds = store.feeds()
             val all = ArrayList<EventInstance>()
             val problems = ArrayList<String>()
+            // CalDAV servers that didn't answer at all during this pass (connect/timeout, not an
+            // HTTP error). Feeds run one after another, so without this a dead server would cost
+            // a full connect timeout per calendar and stall the whole refresh.
+            val unreachable = HashSet<String>()
             for (feed in feeds) {
-                val text = fetchWithCache(feed, problems) ?: continue
+                val text = fetchWithCache(feed, problems, unreachable) ?: continue
                 try {
                     if (feed.kind == "inbox") processInbox(text)
                     else all.addAll(parseFeed(text, feed))
@@ -60,9 +64,13 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
     }
 
     /** Network first; on failure falls back to the last good copy on disk. */
-    private fun fetchWithCache(feed: FeedConfig, problems: MutableList<String>): String? {
+    private fun fetchWithCache(feed: FeedConfig, problems: MutableList<String>,
+                               unreachable: MutableSet<String>): String? {
         val cache = File(ctx.filesDir, "feed_" + md5(feed.url) + ".ics")
+        val origin = if (feed.source == "caldav") CalDavXml.originOf(feed.url) else null
         try {
+            if (origin != null && origin in unreachable)   // already timed out on this server: straight to the cache
+                throw CalDavUnreachable(CalDavXml.hostOf(feed.url), "couldn't reach ${CalDavXml.hostOf(feed.url)}")
             val text = if (feed.source == "caldav") CalDav.fetchIcs(ctx, feed.url) else fetchIcsText(feed.url)
             if (!text.contains("BEGIN:VCALENDAR"))
                 throw RuntimeException("not an iCal feed")
@@ -72,6 +80,7 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
             tmp.renameTo(cache)
             return text
         } catch (e: Exception) {
+            if (e is CalDavUnreachable && origin != null) unreachable.add(origin)
             // CalDAV errors are already readable ("CalDAV account not connected", "sign-in
             // failed…"), so say what happened instead of a bare "offline".
             val reason = if (feed.source == "caldav" && e is IllegalArgumentException) e.message else null

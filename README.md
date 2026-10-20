@@ -207,6 +207,10 @@ Notes
 - The password is only ever sent to the server you connected (and the hosts it listed
   your calendars on, e.g. iCloud's `pNN-caldav` servers) — a board calendar whose
   address points anywhere else is refused rather than sent your credentials.
+- If the server answers a read or a write with a redirect (for example `http://` to
+  `https://`, or a moved address), the Portal reports "the server redirected the
+  request — reconnect using its final address" rather than pretending it worked:
+  connect again using the address the server redirects to.
 - `https://` servers need a certificate Android already trusts; self-signed
   certificates aren't accepted.
 - Disconnecting keeps the calendars on the board, but they stop updating (they keep

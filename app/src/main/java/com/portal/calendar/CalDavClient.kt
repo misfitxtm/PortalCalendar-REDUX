@@ -14,6 +14,13 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 /**
+ * The server couldn't be reached at all (DNS, connect, TLS or read timeout) — as opposed to
+ * answering with an HTTP error. A refresh uses the type to stop trying the same dead host
+ * for every remaining calendar. The message is fit to show to the user.
+ */
+class CalDavUnreachable(val host: String, message: String) : IllegalArgumentException(message)
+
+/**
  * CalDAV over HTTP for one account on one server ([server] is the normalized root,
  * see [CalDavXml.normalizeServer]): calendar discovery, reading a calendar as ICS,
  * creating and deleting events. HTTP Basic auth only.
@@ -29,6 +36,7 @@ class CalDavClient(private val server: String, private val user: String, passwor
 
     private class Reply(val code: Int, val body: String, val url: String) {
         val ok get() = code in 200..299 || code == 207
+        val redirected get() = isRedirect(code)
     }
 
     // ------------------------------------------------------------ discovery
@@ -83,6 +91,7 @@ class CalDavClient(private val server: String, private val user: String, passwor
     fun fetchIcs(calendarHref: String, startMillis: Long, endMillis: Long): String {
         val r = request("REPORT", calendarHref, 1, CalDavXml.calendarQueryBody(startMillis, endMillis))
         checkAuth(r)
+        if (r.redirected) throw IllegalArgumentException(REDIRECTED)
         if (r.code == 404 || r.code == 410)
             throw IllegalArgumentException("that calendar wasn't found on the server (HTTP ${r.code}) — it may have been renamed or deleted")
         if (!r.ok) throw IllegalArgumentException("${serverName()} error HTTP ${r.code}")
@@ -118,7 +127,10 @@ class CalDavClient(private val server: String, private val user: String, passwor
             .header("If-None-Match", "*")
             .put(body.toRequestBody(ICS))
             .build()
-        val code = execute(req) { it.code }
+        // Redirects are NOT followed for a write: OkHttp would replay a redirected PUT as a body-less
+        // GET, which succeeds and makes it look as if the event was stored.
+        val code = execute(req, follow = false) { it.code }
+        if (isRedirect(code)) throw IllegalArgumentException(REDIRECTED)
         if (code == 401)
             throw IllegalArgumentException(
                 if (icloud) "iCloud rejected the sign-in — reconnect with a fresh app-specific password"
@@ -130,10 +142,13 @@ class CalDavClient(private val server: String, private val user: String, passwor
 
     /**
      * Deletes the VEVENT with this UID from whichever of [calendarHrefs] holds it
-     * (located via a CalDAV calendar-query REPORT). Returns true if removed.
+     * (located via a CalDAV calendar-query REPORT). Returns true if removed, false if no
+     * calendar had it. Throws if nothing was removed and some request was answered with a
+     * redirect: a redirected DELETE has not deleted anything, so "not found" would be wrong.
      */
     fun deleteByUid(calendarHrefs: List<String>, uid: String): Boolean {
         if (uid.isBlank()) return false
+        var redirected = false
         for (calHref in calendarHrefs) {
             // Fast path: events we (and Apple's own clients) create live at
             // {collection}/{uid}.ics. Try a direct DELETE first; a 404 just
@@ -141,20 +156,47 @@ class CalDavClient(private val server: String, private val user: String, passwor
             // Encode the UID as a path segment — a feed UID can contain /, #, ?
             // which would otherwise re-target the request at the wrong resource.
             val direct = calHref.trimEnd('/') + "/" + encodeSegment(uid) + ".ics"
-            if (tryDelete(direct, treat404AsGone = false)) return true
+            when (tryDelete(direct, treat404AsGone = false)) {
+                Deleted.YES -> return true
+                Deleted.REDIRECTED -> redirected = true
+                Deleted.NO -> {}
+            }
             // General path: locate the resource by UID (other clients name it
             // differently), then DELETE it. Only resources whose UID matches exactly.
-            for (href in hrefsByUid(calHref, uid))
-                if (tryDelete(CalDavXml.resolve(calHref, href), treat404AsGone = true)) return true
+            val hrefs = try {
+                hrefsByUid(calHref, uid)
+            } catch (e: RedirectedException) {
+                redirected = true
+                emptyList()
+            }
+            for (href in hrefs) {
+                when (tryDelete(CalDavXml.resolve(calHref, href), treat404AsGone = true)) {
+                    Deleted.YES -> return true
+                    Deleted.REDIRECTED -> redirected = true
+                    Deleted.NO -> {}
+                }
+            }
         }
+        if (redirected) throw IllegalArgumentException(REDIRECTED)
         return false
     }
 
-    private fun tryDelete(url: String, treat404AsGone: Boolean): Boolean = try {
+    private enum class Deleted { YES, NO, REDIRECTED }
+
+    private class RedirectedException : Exception()
+
+    private fun tryDelete(url: String, treat404AsGone: Boolean): Deleted = try {
         val req = Request.Builder().url(url)
             .header("Authorization", auth).delete().build()
-        execute(req) { it.code in 200..299 || it.code == 410 || (treat404AsGone && it.code == 404) }
-    } catch (e: Exception) { false }
+        // Not followed: a redirected DELETE would be replayed as a GET, which "succeeds".
+        execute(req, follow = false) {
+            when {
+                isRedirect(it.code) -> Deleted.REDIRECTED
+                it.code in 200..299 || it.code == 410 || (treat404AsGone && it.code == 404) -> Deleted.YES
+                else -> Deleted.NO
+            }
+        }
+    } catch (e: Exception) { Deleted.NO }
 
     /**
      * Hrefs of the resources in a calendar collection whose VEVENT has exactly this UID.
@@ -169,16 +211,10 @@ class CalDavClient(private val server: String, private val user: String, passwor
             <c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT">
             <c:prop-filter name="UID"><c:text-match collation="i;octet">${xmlEscape(uid)}</c:text-match></c:prop-filter>
             </c:comp-filter></c:comp-filter></c:filter></c:calendar-query>""".trimIndent()
-        val req = Request.Builder().url(calUrl)
-            .header("Authorization", auth)
-            .header("Depth", "1")
-            .method("REPORT", body.toRequestBody(XML))
-            .build()
-        val xml = http.newCall(req).execute().use { r ->
-            if (r.code !in 200..299 && r.code != 207) return emptyList()
-            r.body?.string() ?: return emptyList()
-        }
-        return CalDavXml.hrefsWithExactUid(xml, uid)
+        val r = request("REPORT", calUrl, 1, body)
+        if (r.redirected) throw RedirectedException()
+        if (!r.ok) return emptyList()
+        return CalDavXml.hrefsWithExactUid(r.body, uid)
     }
 
     // ------------------------------------------------------------ plumbing
@@ -195,20 +231,27 @@ class CalDavClient(private val server: String, private val user: String, passwor
 
     private fun propfind(url: String, depth: Int, body: String) = request("PROPFIND", url, depth, body)
 
-    /** One authenticated WebDAV request. Redirects are followed (OkHttp re-sends PROPFIND with its body). */
+    /**
+     * One authenticated WebDAV request. Only PROPFIND (discovery, where `/.well-known/caldav`
+     * is a redirect) follows redirects — OkHttp re-sends it with its body. Any other method
+     * would be replayed as a body-less GET, so a 3xx comes back as-is for the caller to report.
+     */
     private fun request(method: String, url: String, depth: Int, body: String): Reply {
         val req = Request.Builder().url(url)
             .header("Authorization", auth)
             .header("Depth", depth.toString())
             .method(method, body.toRequestBody(XML))
             .build()
-        return execute(req) { Reply(it.code, it.body?.string() ?: "", it.request.url.toString()) }
+        return execute(req, follow = method == "PROPFIND") {
+            Reply(it.code, it.body?.string() ?: "", it.request.url.toString())
+        }
     }
 
-    private fun <T> execute(req: Request, read: (okhttp3.Response) -> T): T = try {
-        http.newCall(req).execute().use(read)
+    private fun <T> execute(req: Request, follow: Boolean = true, read: (okhttp3.Response) -> T): T = try {
+        (if (follow) http else httpNoRedirect).newCall(req).execute().use(read)
     } catch (e: IOException) {
-        throw IllegalArgumentException("couldn't reach ${req.url.host} (${e.message ?: e.javaClass.simpleName})")
+        throw CalDavUnreachable(req.url.host,
+            "couldn't reach ${req.url.host} (${e.message ?: e.javaClass.simpleName})")
     }
 
     private fun xmlEscape(s: String): String =
@@ -234,6 +277,16 @@ class CalDavClient(private val server: String, private val user: String, passwor
             .readTimeout(30, TimeUnit.SECONDS)
             .followRedirects(true)
             .build()
+
+        /** For everything but discovery: a redirected write must fail, not be replayed as a GET. */
+        private val httpNoRedirect = http.newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
+
+        const val REDIRECTED = "the server redirected the request — reconnect using its final address"
+
+        private fun isRedirect(code: Int) = code in 300..399 && code != 304
 
         private val XML = "application/xml; charset=utf-8".toMediaType()
         private val ICS = "text/calendar; charset=utf-8".toMediaType()

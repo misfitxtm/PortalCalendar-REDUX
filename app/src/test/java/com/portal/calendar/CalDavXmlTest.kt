@@ -64,6 +64,19 @@ class CalDavXmlTest {
         assertEquals("cloud.example.com", CalDavXml.hostOf("https://cloud.example.com/remote.php/dav"))
     }
 
+    @Test fun originGroupsCalendarsByServer() {
+        val a = CalDavXml.originOf("https://cloud.example.com/remote.php/dav/calendars/alice/personal/")
+        assertEquals("https://cloud.example.com:443", a)
+        assertEquals(a, CalDavXml.originOf("HTTPS://Cloud.Example.com:443/other/path/"))
+        assertEquals("http://192.168.1.20:5232", CalDavXml.originOf("http://192.168.1.20:5232/alice/family/"))
+        // a different port, scheme or host is a different server
+        assertTrue(CalDavXml.originOf("http://192.168.1.20:5233/") != CalDavXml.originOf("http://192.168.1.20:5232/"))
+        assertTrue(CalDavXml.originOf("http://cloud.example.com/") != a)
+        assertTrue(CalDavXml.originOf("https://p41-caldav.icloud.com/x/") != CalDavXml.originOf("https://caldav.icloud.com/x/"))
+        assertNull(CalDavXml.originOf("not a url"))
+        assertNull(CalDavXml.originOf(""))
+    }
+
     @Test fun wellKnownKeepsSchemeHostAndPort() {
         assertEquals("https://cloud.example.com/.well-known/caldav",
             CalDavXml.wellKnownUrl("https://cloud.example.com/remote.php/dav"))

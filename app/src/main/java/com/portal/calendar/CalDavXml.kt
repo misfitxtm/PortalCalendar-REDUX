@@ -59,6 +59,13 @@ object CalDavXml {
 
     fun hostOf(server: String): String = server.toHttpUrlOrNull()?.host ?: server
 
+    /**
+     * `scheme://host:port` of a URL (default ports spelled out, host lower-cased), or null if
+     * it isn't a valid http(s) URL. Two calendars on the same server share it.
+     */
+    fun originOf(url: String): String? =
+        url.trim().toHttpUrlOrNull()?.let { "${it.scheme}://${it.host}:${it.port}" }
+
     /** `<scheme>://<host>[:port]/.well-known/caldav` (RFC 6764) for a server address. */
     fun wellKnownUrl(server: String): String {
         val url = server.toHttpUrlOrNull() ?: throw IllegalArgumentException("bad server address: $server")
