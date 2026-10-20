@@ -30,6 +30,10 @@
   }
   .cal-row:last-child { border-bottom: none; }
   .dot { width: 16px; height: 16px; border-radius: 50%; flex: none; }
+  /* Calendar color chip with an "Aa" preview of the chosen text color. */
+  .dot.aa { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+            font-size: 13px; font-weight: 700; line-height: 1;
+            box-shadow: inset 0 0 0 1px rgba(0,0,0,.14); }
   .cal-name { font-weight: 600; }
   .cal-url { color: #9aa0a8; font-size: 12px; word-break: break-all;
              overflow: hidden; display: -webkit-box;
@@ -40,7 +44,7 @@
     padding: 12px 16px; background: #f0584c; color: #fff; font-weight: 600;
   }
   button.ghost { background: #eae6dc; color: #333a45; }
-  button.del { background: none; color: #f0584c; font-size: 22px; padding: 4px 8px; flex: none; }
+  button.del, button.edit { background: none; color: #f0584c; font-size: 22px; padding: 4px 8px; flex: none; }
   input[type=text], input[type=url], input[type=date], input[type=time],
   input[type=number], select, textarea {
     width: 100%; font: inherit; color: #333a45;
@@ -310,11 +314,20 @@
     <input type="url" id="url" placeholder="https://… or webcal://…" autocomplete="off">
     <div class="row2">
       <label for="color">Color</label>
-      <input type="color" id="color" value="#2d81ff">
+      <input type="color" id="color" value="#2d81ff" oninput="addPreview()">
       <select id="calKind" style="margin:0;flex:1;">
         <option value="calendar">Shows on the board</option>
         <option value="inbox">Inbox — every event is a command (hidden)</option>
       </select>
+    </div>
+    <div class="row2">
+      <label for="calText">Text</label>
+      <select id="calText" style="margin:0;flex:1;" onchange="addPreview()" title="Text color on the calendar's color. Auto picks black or white for the best contrast.">
+        <option value="white">White</option>
+        <option value="black">Black</option>
+        <option value="auto">Auto</option>
+      </select>
+      <div class="dot aa" id="addPv" style="background:#2d81ff;color:#fff;" aria-hidden="true">Aa</div>
     </div>
     <div style="font-size:13px;color:#737983;margin-bottom:10px;">Tip: make a shared calendar called "Portal Inbox", hide it from view on everyone's phones (its checkbox in the calendar app), and add it here as an Inbox — then anyone can send <em>"add oat milk to groceries"</em> or <em>"remind Chani to water the plants"</em> from anywhere without cluttering their own calendar.</div>
     <div class="btnrow">
@@ -598,21 +611,92 @@
 const PALETTE = ['#f0584c','#2bb3a3','#f2a93b','#4fa3e3','#8e7cc3','#e87ea1','#7cb342','#e2574c'];
 let feeds = [];
 
+let editing = -1;   // index of the calendar row being edited inline (-1 = none)
+let editBusy = false;
+
 function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+// Text color on a calendar's color — mirrors Palette.textOn()/autoTextOn() in the app
+// (WCAG relative luminance; Auto = whichever of black/white has the higher contrast).
+function hex6(c){
+  const m = /^#([0-9a-f]{6}|[0-9a-f]{8})$/i.exec(String(c || '').trim());
+  return m ? '#' + m[1].slice(-6).toLowerCase() : '#58a6ff';
+}
+function luminance(hex){
+  const n = parseInt(hex.slice(1), 16);
+  const lin = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+}
+function textOn(color, text){
+  if (text === 'black') return '#000';
+  if (text === 'auto') {
+    const l = luminance(hex6(color));
+    return (l + 0.05) / 0.05 > 1.05 / (l + 0.05) ? '#000' : '#fff';
+  }
+  return '#fff';
+}
+function setPv(el, color, text){ el.style.background = color; el.style.color = textOn(color, text); }
+function addPreview(){
+  setPv(document.getElementById('addPv'),
+        document.getElementById('color').value, document.getElementById('calText').value);
+}
 
 function render(){
   const list = document.getElementById('list');
   if (!feeds.length) { list.innerHTML = '<div class="empty">No calendars yet — add one below</div>'; return; }
-  list.innerHTML = feeds.map((f,i)=>`
+  list.innerHTML = feeds.map((f,i)=> i === editing ? editorRow(i, f) : `
     <div class="cal-row">
-      <div class="dot" style="background:${esc(f.color)}"></div>
+      <div class="dot aa" style="background:${esc(f.color)};color:${textOn(f.color, f.text)}">Aa</div>
       <div class="grow">
         <div class="cal-name">${esc(f.name)}${f.kind === 'inbox' ? ' <span style="font-size:12px;color:#f0584c;">📥 inbox</span>' : ''}</div>
         <div class="cal-url">${esc(f.url)}</div>
       </div>
+      <button class="edit" onclick="editCal(${i})" aria-label="Edit">✎</button>
       <button class="del" onclick="removeCal(${i})" aria-label="Remove">✕</button>
     </div>`).join('');
+  if (editing >= 0 && feeds[editing]) fillEditor(feeds[editing]);
 }
+
+// The inline editor for one calendar row. Values are filled in by fillEditor() via DOM
+// properties (not template strings) so a name with quotes can't break the markup.
+function editorRow(i, f){
+  return `
+    <div class="cal-row" style="align-items:flex-start;">
+      <div class="dot aa" id="edPv" style="margin-top:6px;" aria-hidden="true">Aa</div>
+      <div class="grow">
+        <label for="edName">Name</label>
+        <input type="text" id="edName" autocomplete="off"
+               onkeydown="if(event.key==='Enter')saveEdit(${i});else if(event.key==='Escape')cancelEdit()">
+        <div class="row2" style="flex-wrap:wrap;">
+          <label for="edColor">Color</label>
+          <input type="color" id="edColor" oninput="editPreview()">
+          <label for="edText">Text</label>
+          <select id="edText" style="margin:0;flex:1;min-width:92px;" onchange="editPreview()">
+            <option value="white">White</option>
+            <option value="black">Black</option>
+            <option value="auto">Auto</option>
+          </select>
+        </div>
+        <div class="cal-url" style="margin-bottom:10px;">${esc(f.url)}</div>
+        <div class="btnrow">
+          <button onclick="saveEdit(${i})">Save</button>
+          <button class="ghost" onclick="cancelEdit()">Cancel</button>
+        </div>
+      </div>
+    </div>`;
+}
+function fillEditor(f){
+  document.getElementById('edName').value = f.name;
+  document.getElementById('edColor').value = hex6(f.color);
+  document.getElementById('edText').value = ['black','auto'].includes(f.text) ? f.text : 'white';
+  editPreview();
+}
+function editPreview(){
+  setPv(document.getElementById('edPv'),
+        document.getElementById('edColor').value, document.getElementById('edText').value);
+}
+function editCal(i){ editing = i; render(); }   // one row at a time: render() rebuilds the others
+function cancelEdit(){ editing = -1; render(); }
 
 function show(id, text, ok){
   const el = document.getElementById(id);
@@ -625,6 +709,7 @@ async function load(){
   try {
     feeds = await (await fetch('/api/config')).json();
     document.getElementById('color').value = PALETTE[feeds.length % PALETTE.length];
+    addPreview();
     render();
   } catch(e){ msg('Could not reach the Portal: '+e.message, false); }
 }
@@ -655,20 +740,43 @@ async function addCal(){
     const r = await fetch('/api/validate', {method:'POST', body: JSON.stringify({url})});
     const body = await r.json();
     if (!r.ok) throw new Error(body.error || 'check failed');
-    feeds.push({name, color, url, kind: document.getElementById('calKind').value});
+    feeds.push({name, color, url, kind: document.getElementById('calKind').value,
+                text: document.getElementById('calText').value});
     await save();
     document.getElementById('name').value = '';
     document.getElementById('url').value = '';
     document.getElementById('color').value = PALETTE[feeds.length % PALETTE.length];
+    document.getElementById('calText').value = 'white';
+    addPreview();
     render();
     msg('✓ Added — found ' + body.events + ' events, the Portal is syncing', true);
   } catch(e){ msg(e.message, false); }
 }
 
+async function saveEdit(i){
+  if (editBusy) return;
+  const f = feeds[i];
+  const name = document.getElementById('edName').value.trim();
+  const color = document.getElementById('edColor').value;
+  const text = document.getElementById('edText').value;
+  if (!name) return msg('Enter a name', false);
+  if (name === f.name && color === hex6(f.color) && text === (f.text || 'white')) {
+    editing = -1; render(); return;   // nothing changed — skip the save + resync
+  }
+  const prev = {name: f.name, color: f.color, text: f.text};
+  f.name = name; f.color = color; f.text = text;
+  editBusy = true;
+  try { await save(); editing = -1; render(); msg('Saved '+name, true); }
+  catch(e){ f.name = prev.name; f.color = prev.color; f.text = prev.text; msg(e.message, false); }
+  finally { editBusy = false; }
+}
+
 async function removeCal(i){
+  const wasEditing = editing;   // row indexes shift on remove, so close any open editor
+  editing = -1;
   const removed = feeds.splice(i,1)[0];
   try { await save(); render(); msg('Removed '+removed.name, true); }
-  catch(e){ feeds.splice(i,0,removed); msg(e.message, false); }
+  catch(e){ feeds.splice(i,0,removed); editing = wasEditing; msg(e.message, false); }
 }
 
 async function syncNow(){

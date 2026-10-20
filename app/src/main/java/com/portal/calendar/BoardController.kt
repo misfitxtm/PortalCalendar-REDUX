@@ -2733,7 +2733,7 @@ class BoardController(private val baseCtx: Context) {
                 cell.box.addView(TextView(ctx).apply {
                     text = ev.title
                     textSize = 10.5f
-                    setTextColor(Color.WHITE)
+                    setTextColor(ev.textColor)
                     typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
@@ -3038,12 +3038,12 @@ class BoardController(private val baseCtx: Context) {
                 else -> timeFormat().format(ev.start)
             }
             textSize = 11f
-            setTextColor(0xD9FFFFFF.toInt())
+            setTextColor(Palette.withAlpha(ev.textColor, 0xD9))
         })
         box.addView(TextView(ctx).apply {
             text = ev.title
             textSize = 13.5f
-            setTextColor(Color.WHITE)
+            setTextColor(ev.textColor)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             maxLines = 2
             ellipsize = TextUtils.TruncateAt.END

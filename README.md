@@ -36,7 +36,8 @@ other in step over Wi-Fi — no account, no cloud.
   cramped columns.
 - **Reads any iCal feed**: Google Calendar secret addresses, iCloud public links,
   any `.ics`/`webcal://` URL. Recurring events, edited instances and cancellations
-  handled properly. One color per person.
+  handled properly. One color per person, with white, black or auto-contrast text —
+  rename or recolor a calendar any time from the setup page, no need to re-add it.
 - **Two-way event create *and delete*** — add events from the board (`+ Add`) or the
   setup page, and **remove an event by tapping it → 🗑 Remove**. Both write to the
   *real* calendar (iCloud via CalDAV with an app-specific password, Google via its API

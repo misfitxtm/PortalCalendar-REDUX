@@ -10,7 +10,12 @@ data class FeedConfig(
     val color: Int,
     val url: String,
     /** "calendar" renders on the board; "inbox" = every event is a command. */
-    val kind: String = "calendar")
+    val kind: String = "calendar",
+    /** Text drawn on this calendar's solid color: "white" (default), "black" or "auto". */
+    val text: String = "white") {
+    /** The concrete text color for [text] on [color] (see [Palette.textOn]). */
+    val textColor: Int get() = Palette.textOn(color, text)
+}
 
 /** Feed list persisted as a JSON array in SharedPreferences. */
 class ConfigStore(ctx: Context) {
@@ -29,7 +34,8 @@ class ConfigStore(ctx: Context) {
                 Color.parseColor("#58A6FF")
             }
             out.add(FeedConfig(o.optString("name", "Calendar"), color, o.optString("url", ""),
-                if (o.optString("kind") == "inbox") "inbox" else "calendar"))
+                if (o.optString("kind") == "inbox") "inbox" else "calendar",
+                cleanText(o.optString("text"))))
         }
         return out
     }
@@ -49,7 +55,8 @@ class ConfigStore(ctx: Context) {
                 throw IllegalArgumentException("\"$name\" has an invalid URL")
             Color.parseColor(color) // throws if bad
             clean.put(JSONObject().put("name", name).put("color", color).put("url", url)
-                .put("kind", if (o.optString("kind") == "inbox") "inbox" else "calendar"))
+                .put("kind", if (o.optString("kind") == "inbox") "inbox" else "calendar")
+                .put("text", cleanText(o.optString("text"))))
         }
         prefs.edit().putString(KEY, clean.toString()).commit() // server thread: durable before the 200 reply
     }
@@ -150,5 +157,12 @@ class ConfigStore(ctx: Context) {
 
     companion object {
         private const val KEY = "feeds"
+
+        /** A feed's text setting: "black" / "auto" as given, anything else (or missing) = "white". */
+        fun cleanText(raw: String?): String = when (raw?.trim()?.lowercase()) {
+            "black" -> "black"
+            "auto" -> "auto"
+            else -> "white"
+        }
     }
 }

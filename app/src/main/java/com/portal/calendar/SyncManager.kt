@@ -1,6 +1,7 @@
 package com.portal.calendar
 
 import android.content.Context
+import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
 import biweekly.Biweekly
@@ -25,7 +26,9 @@ data class EventInstance(
     /** Source iCal UID — the handle used to delete-with-sync (empty if absent). */
     val uid: String = "",
     /** True for any occurrence of a repeating series (deleting removes all). */
-    val recurring: Boolean = false
+    val recurring: Boolean = false,
+    /** Text color for anywhere [color] is a solid fill behind this event's text. */
+    val textColor: Int = Color.WHITE
 )
 
 /**
@@ -101,6 +104,7 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
         // UIDs the user deleted from the board — keep them hidden until the
         // source feed catches up (Google's secret iCal can lag hours).
         val suppressed = DeletedEvents.activeUids(ctx)
+        val textColor = feed.textColor
 
         for (ical in Biweekly.parse(text).all()) {
             // Instances of a recurring series that were individually edited carry a
@@ -141,7 +145,7 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
                     // Edited single instance: add as-is (part of a series).
                     val s = ds.value.time
                     if (s + durMs >= windowStart && s <= windowEnd)
-                        out.add(EventInstance(s, s + durMs, allDay, title, loc, feed.name, feed.color, evUid, true))
+                        out.add(EventInstance(s, s + durMs, allDay, title, loc, feed.name, feed.color, evUid, true, textColor))
                     continue
                 }
 
@@ -149,7 +153,7 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
                 if (!recurring) {
                     val s = ds.value.time
                     if (s + durMs >= windowStart && s <= windowEnd)
-                        out.add(EventInstance(s, s + durMs, allDay, title, loc, feed.name, feed.color, evUid, false))
+                        out.add(EventInstance(s, s + durMs, allDay, title, loc, feed.name, feed.color, evUid, false, textColor))
                 } else {
                     val skips = e.uid?.value?.let { overridden[it] }
                     // Honors RRULE + RDATE + EXDATE. Expand in the EVENT's own
@@ -166,7 +170,7 @@ class SyncManager(private val ctx: Context, private val store: ConfigStore) {
                         if (occ.time > windowEnd) break
                         if (occ.time + durMs < windowStart) continue
                         if (skips?.contains(occ.time) == true) continue
-                        out.add(EventInstance(occ.time, occ.time + durMs, allDay, title, loc, feed.name, feed.color, evUid, true))
+                        out.add(EventInstance(occ.time, occ.time + durMs, allDay, title, loc, feed.name, feed.color, evUid, true, textColor))
                     }
                 }
             }
