@@ -45,7 +45,7 @@
   }
   button.ghost { background: #eae6dc; color: #333a45; }
   button.del, button.edit { background: none; color: #f0584c; font-size: 22px; padding: 4px 8px; flex: none; }
-  input[type=text], input[type=url], input[type=date], input[type=time],
+  input[type=text], input[type=url], input[type=password], input[type=date], input[type=time],
   input[type=number], select, textarea {
     width: 100%; font: inherit; color: #333a45;
     background: #fbfaf6; border: 1px solid #ddd8cc; border-radius: 12px;
@@ -519,7 +519,10 @@
       <label for="icEmail">Apple ID / username</label>
       <input type="text" id="icEmail" placeholder="name@icloud.com" autocomplete="off" autocapitalize="off" spellcheck="false">
       <label for="icPass">App-specific password / password</label>
-      <input type="text" id="icPass" placeholder="xxxx-xxxx-xxxx-xxxx" autocomplete="off">
+      <div class="row2" style="margin:6px 0 12px;">
+        <input type="password" id="icPass" placeholder="xxxx-xxxx-xxxx-xxxx" autocomplete="off" autocapitalize="off" spellcheck="false" style="margin:0;flex:1;min-width:0;">
+        <button type="button" class="ghost" id="icPassToggle" style="flex:none;padding:10px 14px;" onclick="togglePw('icPass', this)" aria-label="Show or hide the password">Show</button>
+      </div>
       <div style="font-size:13px;color:#737983;margin-bottom:10px;"><strong>iCloud:</strong> leave Server blank and create an app-specific password at <a href="https://account.apple.com" target="_blank" rel="noopener">account.apple.com</a> → Sign-In and Security → App-Specific Passwords.<br><strong>Nextcloud, Radicale, Baïkal, Fastmail, Synology…:</strong> enter the server's CalDAV address, your username and password (Nextcloud and Fastmail need an app password you create in their settings). Use <code>https://</code> where you can — plain <code>http://</code> (fine for a server on your own Wi-Fi) sends the password unencrypted. Everything is stored on the Portal only and can be revoked anytime.</div>
       <button class="ghost" style="width:100%;" onclick="connectIcloud()">Connect</button>
     </div>
@@ -956,6 +959,14 @@ async function loadWriters(){
   try { applyWriters(await (await fetch('/api/writers')).json()); } catch(e){}
 }
 
+// Password fields stay hidden, with a Show/Hide toggle: app-specific passwords are long and people want to check them.
+function togglePw(id, btn){
+  const el = document.getElementById(id);
+  const reveal = el.type === 'password';
+  el.type = reveal ? 'text' : 'password';
+  btn.textContent = reveal ? 'Hide' : 'Show';
+}
+
 async function connectIcloud(){
   const server = document.getElementById('icServer').value.trim();   // blank = iCloud
   const email = document.getElementById('icEmail').value.trim();
@@ -968,6 +979,8 @@ async function connectIcloud(){
     const body = await r.json();
     if (!r.ok) throw new Error(body.error || 'connection failed');
     document.getElementById('icPass').value = '';
+    document.getElementById('icPass').type = 'password';
+    document.getElementById('icPassToggle').textContent = 'Show';
     applyWriters(body);
     show('icMsg', '✓ Connected', true);
   } catch(e){ show('icMsg', e.message, false); }
@@ -2258,7 +2271,10 @@ async function wizRenderIcloud(){
     ? `<div style="font-size:14px;margin-top:8px;">✓ Connected as <strong>${esc(email)}</strong></div>`
     : `
       <input type="text" id="wizIcEmail" placeholder="Apple ID (name@icloud.com)" autocomplete="off">
-      <input type="text" id="wizIcPass" placeholder="App-specific password (xxxx-xxxx-xxxx-xxxx)" autocomplete="off">
+      <div class="row2" style="margin:6px 0 12px;">
+        <input type="password" id="wizIcPass" placeholder="App-specific password (xxxx-xxxx-xxxx-xxxx)" autocomplete="off" autocapitalize="off" spellcheck="false" style="margin:0;flex:1;min-width:0;">
+        <button type="button" class="ghost" style="flex:none;padding:10px 14px;" onclick="togglePw('wizIcPass', this)" aria-label="Show or hide the password">Show</button>
+      </div>
       <div style="font-size:13px;color:#737983;margin-bottom:10px;">Create one at
         <a href="https://account.apple.com" target="_blank" rel="noopener">account.apple.com</a>
         → Sign-In and Security → App-Specific Passwords. Stored on the Portal only.</div>

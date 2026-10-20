@@ -2212,7 +2212,7 @@ class BoardController(private val baseCtx: Context) {
         val cals = Writers.calendars(ctx)
         if (cals.isEmpty()) {
             addCalButton.text = "none connected"
-            addMsg.text = "Connect iCloud or Google on the setup page (⚙) first"
+            addMsg.text = "Connect iCloud/CalDAV or Google on the setup page (⚙) first"
         } else {
             addCalButton.text = cals[addCalIndex.coerceIn(cals.indices)].name
         }
@@ -2223,7 +2223,7 @@ class BoardController(private val baseCtx: Context) {
         val title = addTitleInput.text.toString().trim()
         if (title.isEmpty()) { addMsg.text = "Give it a name"; return }
         val cals = Writers.calendars(ctx)
-        if (cals.isEmpty()) { addMsg.text = "Connect iCloud or Google on the setup page (⚙) first"; return }
+        if (cals.isEmpty()) { addMsg.text = "Connect iCloud/CalDAV or Google on the setup page (⚙) first"; return }
         val cal = cals[addCalIndex.coerceIn(cals.indices)]
 
         val startCal = addDate.clone() as Calendar
