@@ -624,7 +624,11 @@ let editBusy = false;
 let feedsLoaded = false;   // save() posts the whole list, so never save before it has been read
 let icBusy = false;
 
-function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+// HTML-escapes for text AND attribute values (value="${esc(x)}"): the DOM escapes & < >, quotes are added here.
+function esc(s){
+  const d = document.createElement('div'); d.textContent = s;
+  return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 
 // Text color on a calendar's color — mirrors Palette.textOn()/autoTextOn() in the app
 // (WCAG relative luminance; Auto = whichever of black/white has the higher contrast).
@@ -723,9 +727,18 @@ function show(id, text, ok){
 }
 function msg(text, ok){ show('msg', text, ok); }
 
+// The Portal's current calendar list. Throws unless it really is a list (an error page or an
+// {"error":…} object must never become the model that save() posts back).
+async function fetchFeeds(){
+  const r = await fetch('/api/config');
+  const list = await r.json();
+  if (!r.ok || !Array.isArray(list)) throw new Error((list && list.error) || 'unexpected reply (HTTP ' + r.status + ')');
+  return list;
+}
+
 async function load(){
   try {
-    feeds = await (await fetch('/api/config')).json();
+    feeds = await fetchFeeds();
     feedsLoaded = true;
     document.getElementById('color').value = PALETTE[feeds.length % PALETTE.length];
     addPreview();
@@ -734,6 +747,8 @@ async function load(){
 }
 
 async function save(){
+  // This posts the WHOLE list, replacing what the Portal has: never do it before the list was read.
+  if (!feedsLoaded) throw new Error('Your calendars have not loaded yet — reload the page and try again');
   const r = await fetch('/api/config', {method:'POST', body: JSON.stringify(feeds)});
   const body = await r.json().catch(()=>({}));
   if (!r.ok) throw new Error(body.error || 'save failed');
@@ -1017,17 +1032,29 @@ function renderIcCals(){
 async function showOnBoard(i){
   const c = ((writers.icloud || {}).calendars || [])[i];
   if (!c || icBusy) return;
-  if (!feedsLoaded) return show('icMsg', 'Still loading your calendars — try again in a moment', false);
-  if (feeds.some(f => f.source === 'caldav' && f.url === c.href)) return;
+  if (feedsLoaded && feeds.some(f => f.source === 'caldav' && f.url === c.href)) return;
   icBusy = true;
   show('icMsg', 'Checking ' + c.name + '…', true);
   try {
     const r = await fetch('/api/validate', {method:'POST', body: JSON.stringify({url: c.href, source: 'caldav'})});
     const body = await r.json();
     if (!r.ok) throw new Error(body.error || 'check failed');
-    feeds.push({name: c.name, color: c.color || PALETTE[feeds.length % PALETTE.length], url: c.href,
-                kind: 'calendar', text: 'white', source: 'caldav'});
-    try { await save(); } catch(e){ feeds.pop(); throw e; }
+    // The check can take a while, and save() posts the whole list: re-read what the Portal has
+    // now (like the wizard does) so a calendar added meanwhile, here or on another device, survives.
+    try { feeds = await fetchFeeds(); feedsLoaded = true; }
+    catch(e){ throw new Error('Could not read your calendars from the Portal (' + e.message + ')'); }
+    render();   // rows are addressed by index: keep what's on screen in step with the list just read
+    if (feeds.some(f => f.source === 'caldav' && f.url === c.href))   // added meanwhile elsewhere
+      return show('icMsg', '✓ ' + c.name + ' is already on the board', true);
+    const entry = {name: c.name, color: c.color || PALETTE[feeds.length % PALETTE.length], url: c.href,
+                   kind: 'calendar', text: 'white', source: 'caldav'};
+    feeds.push(entry);
+    try { await save(); }
+    catch(e){
+      const k = feeds.indexOf(entry);   // by identity: the list may have changed while saving
+      if (k >= 0) feeds.splice(k, 1);
+      throw e;
+    }
     document.getElementById('color').value = PALETTE[feeds.length % PALETTE.length];
     addPreview();
     render();
