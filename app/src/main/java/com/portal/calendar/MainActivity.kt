@@ -11,6 +11,7 @@ import android.hardware.SensorManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.Surface
 import android.view.View
 import android.view.WindowManager
 import kotlin.math.abs
@@ -25,6 +26,11 @@ class MainActivity : Activity() {
     private lateinit var board: BoardController
     private var lastOrientation = Configuration.ORIENTATION_UNDEFINED
     private var lastNightMode = Configuration.UI_MODE_NIGHT_UNDEFINED
+    // True when this panel's natural (rotation-0) orientation is portrait. The
+    // accelerometer's axes are fixed to that natural frame, so [orientListener]
+    // needs it to tell "turned sideways" from "upright". Null until the first
+    // usable reading; see [latchNaturalOrientation].
+    private var naturalPortrait: Boolean? = null
 
     private val idleHandler = Handler(Looper.getMainLooper())
     // YIELD mode: after this fires, drop keep-screen-on so the device idles into
@@ -59,6 +65,7 @@ class MainActivity : Activity() {
         setTurnScreenOn(true)
         lastOrientation = resources.configuration.orientation
         lastNightMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        latchNaturalOrientation(lastOrientation)
         attachBoard(reopenSettings = false)
         hideSystemUi()
     }
@@ -84,11 +91,45 @@ class MainActivity : Activity() {
     }
 
     /**
+     * Works out whether the panel's NATURAL orientation (the one at display
+     * rotation 0, which is the frame the accelerometer reports in) is portrait.
+     *
+     * The window's current orientation is natural XOR the display being turned
+     * a quarter-turn (ROTATION_90/270), so natural-portrait is "currently
+     * portrait" XOR "rotated". The gen-1 Portal+ is natural-landscape; the
+     * Portal Gen 2 10" evidently isn't, which is why the raw-axis mapping in
+     * [orientListener] came out inverted there.
+     *
+     * Latched ONCE (first valid reading wins), never re-derived: it's a fixed
+     * property of the hardware, and re-reading after our own explicit
+     * PORTRAIT/LANDSCAPE locks could oscillate on firmware that doesn't report
+     * the display rotation faithfully (lock → re-read flips the mapping → lock
+     * the other way → …). A wrong-but-stable answer is recoverable with the
+     * "swap" setting; flapping isn't. UNDEFINED/SQUARE say nothing about the
+     * axis, so those leave it unset for a later call (onResume) to latch.
+     */
+    @Suppress("DEPRECATION") // Activity.display is API 30+; minSdk is 28
+    private fun latchNaturalOrientation(configOrientation: Int) {
+        if (naturalPortrait != null) return
+        val portraitNow = when (configOrientation) {
+            Configuration.ORIENTATION_PORTRAIT -> true
+            Configuration.ORIENTATION_LANDSCAPE -> false
+            else -> return
+        }
+        val rotation = windowManager.defaultDisplay.rotation
+        val quarterTurned = rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270
+        naturalPortrait = portraitNow != quarterTurned
+    }
+
+    /**
      * Honors the configured orientation. "auto" is special: this device's
      * rotation policy ignores sensor/USER rotation for apps (it's locked as a
      * fixed display), but it DOES honor an explicit PORTRAIT/LANDSCAPE request.
      * So in auto mode we read the accelerometer ourselves ([orientListener])
      * and set an explicit lock to match how the Portal is physically turned.
+     * The raw sensor axes belong to the panel's natural orientation, so the
+     * listener maps them through [naturalPortrait] (unset is treated as
+     * natural-landscape, the gen-1 behavior) rather than assuming it.
      */
     private fun applyOrientation() {
         requestedOrientation = when (App.instance.store.orientation()) {
@@ -113,11 +154,28 @@ class MainActivity : Activity() {
         override fun onSensorChanged(e: SensorEvent) {
             val ax = abs(e.values[0]); val ay = abs(e.values[1])
             if (ax + ay < 4.5f) return // lying too flat to tell — leave as-is
-            val want = when {
-                ax > ay + 2f -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                ay > ax + 2f -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            // Gravity along the natural Y axis means the Portal is held the way
+            // its panel is naturally built (landscape on a gen-1, portrait on
+            // a natural-portrait panel); along natural X it's on its side.
+            val np = naturalPortrait == true // not latched yet → natural-landscape, as before
+            val natural = if (np) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                          else ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            val sideways = if (np) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                           else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            var want = when {
+                ax > ay + 2f -> sideways
+                ay > ax + 2f -> natural
                 else -> return // ~45° dead zone, avoid flapping
             }
+            // Safety net for hardware whose sensor is mounted off-axis from the
+            // panel (so detection above can't know): the user-set "swap" flips
+            // the answer. Read per reading so toggling it applies on the next
+            // sample; if it now disagrees with the current lock, the debounce
+            // below flips us — no restart, nothing left stuck on the old lock.
+            if (App.instance.store.orientationSwap())
+                want = if (want == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
+                    ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             if (want == requestedOrientation) { pendingCount = 0; return }
             // Require a few consistent readings before flipping (debounce jitter).
             if (want == pendingOrient) {
@@ -162,6 +220,9 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        // Fallback only: a no-op once latched; matters if onCreate's reading
+        // was UNDEFINED/SQUARE.
+        latchNaturalOrientation(resources.configuration.orientation)
         updateSensorListener()
         armScreenPolicy() // re-arm after waking back from the screensaver
     }

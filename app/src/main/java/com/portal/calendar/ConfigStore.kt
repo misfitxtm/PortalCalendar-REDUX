@@ -126,6 +126,17 @@ class ConfigStore(ctx: Context) {
         prefs.edit().putString("orientation", clean).commit()
     }
 
+    /**
+     * Auto-rotate escape hatch: invert the accelerometer→orientation answer for
+     * hardware whose sensor is mounted off-axis from the panel in a way we can't
+     * detect. Hardware-specific, so it is device-local — see FamilySync.LOCAL_PREFS.
+     */
+    fun orientationSwap(): Boolean = prefs.getBoolean("orientation_swap", false)
+
+    fun setOrientationSwap(v: Boolean) {
+        prefs.edit().putBoolean("orientation_swap", v).commit()
+    }
+
     /** Theme: "light" (default) / "dark" / "auto" (night by clock) / "system". */
     fun theme(): String = prefs.getString("theme", "light") ?: "light"
 
