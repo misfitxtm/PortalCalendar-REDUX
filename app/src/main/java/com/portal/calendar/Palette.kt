@@ -2,7 +2,8 @@ package com.portal.calendar
 
 /**
  * The design language, in one place. Warm-paper board, white cards with soft
- * shadows, one coral accent, solid per-person color fills with white text.
+ * shadows, one coral accent, solid per-person color fills with white text
+ * (or black/auto per calendar — see [textOn]).
  *
  * Patterns the screens follow:
  *  - Section headers: 13sp ACCENT sans-serif-medium MICROCAPS (letterSpacing .14)
@@ -38,6 +39,39 @@ object Palette {
     val SCRIM get() = if (dark) 0x99000000.toInt() else 0x59000000
 
     private fun pick(light: Long, dark2: Long): Int = (if (dark) dark2 else light).toInt()
+
+    // ---- text on a solid calendar color ------------------------------------
+    // The one place that decides white vs black text for a calendar's color.
+    // config.html mirrors [autoTextOn] for its live preview — keep them in step.
+
+    /** WCAG 2.x relative luminance of an sRGB color (alpha ignored), 0 = black .. 1 = white. */
+    fun luminance(color: Int): Double {
+        fun lin(channel: Int): Double {
+            val s = channel / 255.0
+            return if (s <= 0.04045) s / 12.92 else Math.pow((s + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * lin((color shr 16) and 0xFF) +
+            0.7152 * lin((color shr 8) and 0xFF) +
+            0.0722 * lin(color and 0xFF)
+    }
+
+    /** Black or white, whichever has the higher WCAG contrast ratio against [fill]; a tie goes to white. */
+    fun autoTextOn(fill: Int): Int {
+        val l = luminance(fill)
+        val vsWhite = 1.05 / (l + 0.05)
+        val vsBlack = (l + 0.05) / 0.05
+        return if (vsBlack > vsWhite) android.graphics.Color.BLACK else android.graphics.Color.WHITE
+    }
+
+    /** Text color on [fill] for a calendar's `text` setting: "black", "auto", else white. */
+    fun textOn(fill: Int, setting: String): Int = when (setting) {
+        "black" -> android.graphics.Color.BLACK
+        "auto" -> autoTextOn(fill)
+        else -> android.graphics.Color.WHITE
+    }
+
+    /** [color] at the given 0..255 alpha — for the secondary line on a colored chip. */
+    fun withAlpha(color: Int, alpha: Int): Int = (color and 0x00FFFFFF) or (alpha shl 24)
 
     const val R_CARD = 16
     const val R_ELEMENT = 12
