@@ -53,6 +53,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        App.instance.refrontAfterBoot()
         armScreenPolicy()
         // Surface over any lock layer when relaunched out of sleep by the takeover.
         setShowWhenLocked(true)

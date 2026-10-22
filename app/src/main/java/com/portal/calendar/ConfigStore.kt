@@ -202,6 +202,23 @@ class ConfigStore(ctx: Context) {
         prefs.edit().putString("kid_pin", v).commit()
     }
 
+    /** Chore-approval PIN; empty = use the kid-lock PIN. */
+    fun approvalPin(): String = prefs.getString("approval_pin", "") ?: ""
+
+    fun setApprovalPin(v: String) {
+        if (v.isNotEmpty() && !v.matches(Regex("\\d{4}")))
+            throw IllegalArgumentException("the PIN must be exactly 4 digits")
+        prefs.edit().putString("approval_pin", v).commit()
+    }
+
+    /** "pin" = a PIN popup on each check-off; "queue" = kids request, a parent approves. */
+    fun approvalMode(): String = prefs.getString("approval_mode", "pin").takeIf { it == "queue" } ?: "pin"
+
+    fun setApprovalMode(v: String) {
+        if (v != "pin" && v != "queue") throw IllegalArgumentException("mode must be pin or queue")
+        prefs.edit().putString("approval_mode", v).commit()
+    }
+
     /** Global UI zoom (1.0 = designed-for-Portal+ size; 10″ Portals want ~1.1–1.25). */
     fun uiScale(): Float = prefs.getFloat("ui_scale", 1f)
 

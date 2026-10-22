@@ -403,7 +403,7 @@
   <div class="card" data-tab="family">
     <strong>👨‍👩‍👧 Family members</strong>
     <div style="font-size:13px;color:var(--muted);margin:6px 0 10px;">Members power chores, stars and color coding across the board. Started from your calendar names — edit freely.</div>
-    <div style="font-size:12px;color:var(--faint);margin-bottom:4px;">The optional PIN means only that person (or a parent with the kid-lock PIN) can check off their chores on the board.</div>
+    <div style="font-size:12px;color:var(--faint);margin-bottom:4px;">Chore check-offs on the board pop up a parent-approval prompt that takes the kid-lock PIN (Settings → Kid lock).</div>
     <div id="membersBox"></div>
     <div class="btnrow" style="margin-top:10px;">
       <button class="ghost" onclick="addMemberRow()">+ Add member</button>
@@ -649,8 +649,27 @@
       <button class="ghost" style="flex:none;" onclick="setPin()">Set PIN</button>
       <button class="ghost" style="flex:none;" onclick="clearPin()">Remove</button>
     </div>
-    <div style="font-size:13px;color:var(--muted);margin-top:6px;">With a PIN set, adding events, opening Settings, and deleting lists on the Portal's touchscreen ask for it. Kids can still check off chores and list items. This page stays unlocked.</div>
+    <div style="font-size:13px;color:var(--muted);margin-top:6px;">With a PIN set, adding events, opening Settings, and deleting lists on the Portal's touchscreen ask for it. Checking off a chore (which awards a star) also asks for it, so a parent approves. Without a PIN, chores need no approval. This page stays unlocked.</div>
     <div id="pinMsg" class="msgline"></div>
+    <div style="margin-top:14px;"><strong>✅ Chore approval PIN</strong></div>
+    <div id="apinStatus" style="font-size:14px;color:var(--ink2);margin:8px 0;"></div>
+    <div class="row2">
+      <input type="text" id="apinInput" placeholder="4-digit PIN" maxlength="4" inputmode="numeric"
+             autocomplete="off" style="margin:0;">
+      <button class="ghost" style="flex:none;" onclick="setApin()">Set PIN</button>
+      <button class="ghost" style="flex:none;" onclick="setApin(true)">Use kid-lock PIN</button>
+    </div>
+    <div style="font-size:13px;color:var(--muted);margin-top:6px;">Asked when a kid checks off a chore. Leave it unset to use the kid-lock PIN above; the kid-lock PIN always works too.</div>
+    <div id="apinMsg" class="msgline"></div>
+    <div style="margin-top:14px;"><strong>How chores get approved</strong></div>
+    <div class="row2" style="margin-top:8px;">
+      <select id="apMode" onchange="setApMode(this.value)" style="margin:0;">
+        <option value="pin">PIN popup on each check-off</option>
+        <option value="queue">Kids request, a parent approves</option>
+      </select>
+    </div>
+    <div style="font-size:13px;color:var(--muted);margin-top:6px;">In request mode a kid's tap shows ⏳ on the board until a parent taps it and enters the PIN. Chores are approved on the tablet only.</div>
+    <details style="margin-top:10px;"><summary style="cursor:pointer;">Approval log</summary><div id="apLog" style="font-size:13px;margin-top:6px;"></div></details>
   </div>
 
   <div class="card" data-tab="settings">
@@ -2077,6 +2096,42 @@ async function clearPin(){
   } catch(e){ show('pinMsg', e.message, false); }
 }
 
+async function loadApin(){
+  try {
+    const st = await (await fetch('/api/approval-pin')).json();
+    document.getElementById('apinStatus').textContent = st.enabled
+      ? 'A separate approval PIN is set.' : 'Using the kid-lock PIN.';
+    document.getElementById('apMode').value = st.mode;
+  } catch(e){}
+  loadApprovals();
+}
+async function setApMode(mode){
+  try {
+    await fetch('/api/approval-pin', {method:'POST', body: JSON.stringify({mode})});
+    show('apinMsg', '✓ Saved', true);
+  } catch(e){ show('apinMsg', e.message, false); }
+}
+async function loadApprovals(){
+  try {
+    const st = await (await fetch('/api/chores')).json();
+    const mem = id => (st.members.find(m => m.id === id) || {}).name || '';
+    document.getElementById('apLog').innerHTML = st.approvalLog.filter(e => e.by).reverse().map(e =>
+      `${esc(new Date(e.ts).toLocaleString())} — ${esc(e.by)} approved “${esc(e.title)}” for ${esc(mem(e.memberId))}`
+    ).join('<br>') || 'Nothing yet.';
+  } catch(e){}
+}
+async function setApin(clear){
+  const pin = clear ? '' : document.getElementById('apinInput').value.trim();
+  if (!clear && !/^\d{4}$/.test(pin)) return show('apinMsg', 'Enter exactly 4 digits', false);
+  try {
+    const r = await fetch('/api/approval-pin', {method:'POST', body: JSON.stringify({pin})});
+    if (!r.ok) throw new Error((await r.json()).error || 'failed');
+    document.getElementById('apinInput').value = '';
+    show('apinMsg', clear ? 'Using the kid-lock PIN' : '✓ PIN set', true);
+    loadApin();
+  } catch(e){ show('apinMsg', e.message, false); }
+}
+
 // ----- weather -----
 let wxState = {unit:'f'};
 
@@ -2687,7 +2742,7 @@ function showWizard(){
 async function exitWizard(){
   try { await fetch('/api/setup', {method:'POST', body:'{}'}); } catch(e){}
   document.getElementById('wizard').style.display = 'none';
-  load(); loadSaver(); loadEffects(); loadFeatures(); loadWeek(); loadSync(); loadWriters(); loadScale(); loadWx(); loadPin();
+  load(); loadSaver(); loadEffects(); loadFeatures(); loadWeek(); loadSync(); loadWriters(); loadScale(); loadWx(); loadPin(); loadApin();
 }
 
 async function maybeStartWizard(){
@@ -2936,7 +2991,7 @@ loadSync();
 loadWriters();
 loadScale();
 loadWx();
-loadPin();
+loadPin(); loadApin();
 loadLayout();
 loadAi();
 </script>
