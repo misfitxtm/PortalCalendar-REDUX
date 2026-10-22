@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import java.util.concurrent.CopyOnWriteArraySet
 
 /**
@@ -151,6 +152,20 @@ class App : Application() {
             PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
             reason
         )?.acquire(3000)
+    }
+
+    private var refronted = false
+
+    /** Immortal sends Home a few seconds after its boot launch and buries the board; the overlay permission lets us come back once. */
+    fun refrontAfterBoot() {
+        if (refronted || SystemClock.elapsedRealtime() > 180_000) return
+        refronted = true
+        main.postDelayed({
+            runCatching {
+                startActivity(Intent(this, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+            }
+        }, 12_000)
     }
 
     /** Bring the board to the front now (used by the foreground guard). */

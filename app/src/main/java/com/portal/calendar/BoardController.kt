@@ -1761,7 +1761,8 @@ class BoardController(private val baseCtx: Context) {
     private fun askPin(expected: String, title: String, action: () -> Unit) {
         if (expected.isEmpty()) { action(); return }
         pinExpected = expected
-        pinTitle.text = title
+        pinBaseTitle = title
+        pinTitle.text = if (System.currentTimeMillis() < pinLockedUntil) "Too many tries — wait a minute 🔒" else title
         pinEntry = ""
         pinAction = action
         updatePinDots()
@@ -1822,9 +1823,15 @@ class BoardController(private val baseCtx: Context) {
         return scrim
     }
 
+    private var pinBaseTitle = ""
+    private var pinFails = 0
+    private var pinLockedUntil = 0L
+
     private fun pinKey(label: String) {
+        if (label == "✕") { pinOverlay.visibility = View.GONE; return }
+        if (System.currentTimeMillis() < pinLockedUntil) return
+        if (pinTitle.text != pinBaseTitle) pinTitle.text = pinBaseTitle
         when (label) {
-            "✕" -> { pinOverlay.visibility = View.GONE; return }
             "⌫" -> pinEntry = pinEntry.dropLast(1)
             else -> if (pinEntry.length < 4) pinEntry += label
         }
@@ -1832,11 +1839,18 @@ class BoardController(private val baseCtx: Context) {
         if (pinEntry.length == 4) {
             // The parent kid-lock PIN always works as an override.
             if (pinEntry == pinExpected || (store.pin().isNotEmpty() && pinEntry == store.pin())) {
+                pinFails = 0
                 pinOverlay.visibility = View.GONE
                 pinAction?.invoke()
                 pinAction = null
             } else {
                 pinDots.setTextColor(ACCENT)
+                // Five misses in a row freezes the keypad for a minute so a PIN can't be guessed.
+                if (++pinFails >= 5) {
+                    pinFails = 0
+                    pinLockedUntil = System.currentTimeMillis() + 60_000
+                    pinTitle.text = "Too many tries — wait a minute 🔒"
+                }
                 handler.postDelayed({
                     pinEntry = ""
                     pinDots.setTextColor(INK)
@@ -2003,8 +2017,9 @@ class BoardController(private val baseCtx: Context) {
         area.addView(listsTab.view, FrameLayout.LayoutParams(MATCH, MATCH))
         choresTab = ChoresTab(ctx,
             onAddChore = { requirePin { showChoreOverlay() } },
-            onGate = { memberPin, memberName, action ->
-                askPin(memberPin, "$memberName's PIN ⭐", action)
+            // Stars need a parent's approval, not the kid's own PIN.
+            onGate = { _, memberName, action ->
+                askPin(store.approvalPin().ifEmpty { store.pin() }, "Parent approval for $memberName ⭐", action)
             },
             onRemoveChore = { id, label ->
                 requirePin {

@@ -15,6 +15,7 @@
         tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- Optional: tap-to-talk voice commands (audio transcribed by the user's Gemini key). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Wi-Fi photo upload writes to the shared Pictures folder (targetSdk 28 keeps classic storage access). -->

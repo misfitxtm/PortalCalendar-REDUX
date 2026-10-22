@@ -81,8 +81,13 @@ class ConfigServer(
         }
         s.uri == "/api/chores" && s.method == Method.GET ->
             json(Chores.statusJson(ctx))
-        s.uri == "/api/chores" && s.method == Method.POST ->
-            json(Chores.mutate(ctx, org.json.JSONObject(readBody(s))))
+        s.uri == "/api/chores" && s.method == Method.POST -> {
+            val b = org.json.JSONObject(readBody(s))
+            // Approvals happen on the tablet, where the kids can see their progress.
+            if (b.optString("action") in setOf("toggle", "request", "approve", "deny"))
+                throw IllegalArgumentException("chores are checked off and approved on the tablet")
+            json(Chores.mutate(ctx, b))
+        }
         s.uri == "/api/reset" && s.method == Method.POST -> {
             // Wipes everything. The caller has to type the word, so a stray request can't do it.
             if (org.json.JSONObject(readBody(s)).optString("confirm") != "RESET") throw IllegalArgumentException("type RESET to confirm")
@@ -198,6 +203,14 @@ class ConfigServer(
             for (key in Rules.TAB_KEYS) if (o.has(key)) store.setFeature(key, o.getBoolean(key))
             App.instance.notifyDataChanged()
             json(featuresJson())
+        }
+        s.uri == "/api/approval-pin" && s.method == Method.GET ->
+            json("{\"enabled\":${store.approvalPin().isNotEmpty()},\"mode\":\"${store.approvalMode()}\"}")
+        s.uri == "/api/approval-pin" && s.method == Method.POST -> {
+            val b = org.json.JSONObject(readBody(s))
+            if (b.has("pin")) store.setApprovalPin(b.optString("pin"))
+            if (b.has("mode")) store.setApprovalMode(b.optString("mode"))
+            json("{\"enabled\":${store.approvalPin().isNotEmpty()},\"mode\":\"${store.approvalMode()}\"}")
         }
         s.uri == "/api/pin" && s.method == Method.GET ->
             json("{\"enabled\":${store.pin().isNotEmpty()}}")

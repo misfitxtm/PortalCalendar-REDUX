@@ -29,6 +29,8 @@ object Chores {
     private const val POINTS = "chore_points.json"
     private const val REWARDS = "chore_rewards.json"
     private const val PROFILES = "chore_profiles.json"
+    private const val PENDING = "chore_pending.json"
+    private const val LOG = "chore_approvals.json"
     const val DEFAULT_GOAL = 10
 
     class Starter(val icon: String, val title: String, val points: Int, val days: List<Int>)
@@ -85,6 +87,21 @@ object Chores {
         if (isDone != done) mutate(ctx, JSONObject().put("action", "toggle").put("choreId", id))
     }
 
+    private fun findChore(ctx: Context, id: String): JSONObject =
+        Data.readArray(ctx, FILE).let { arr ->
+            (0 until arr.length()).map { arr.getJSONObject(it) }.firstOrNull { it.optString("id") == id }
+        } ?: throw IllegalArgumentException("that chore no longer exists")
+
+    /** One line per approval, newest last; the board has a single parent PIN, so the approver is just "Parent". */
+    private fun logApproval(ctx: Context, chore: JSONObject) {
+        Data.mutate(ctx, LOG) { arr ->
+            arr.put(JSONObject().put("ts", System.currentTimeMillis()).put("by", "Parent")
+                .put("choreId", chore.optString("id")).put("title", chore.optString("title"))
+                .put("memberId", chore.optString("memberId")))
+            while (arr.length() > 200) arr.remove(0)
+        }
+    }
+
     private fun dayFmt() = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
     /** [includePins] only for the board's own PIN pad — never over HTTP. */
@@ -113,6 +130,14 @@ object Chores {
             if (d.optString("date") == today) doneToday.put(d.optString("choreId"))
         }
 
+        val pending = Data.readArray(ctx, PENDING)
+        val pendingToday = JSONArray()
+        for (i in 0 until pending.length()) {
+            val d = pending.getJSONObject(i)
+            if (d.optString("date") == today) pendingToday.put(d.optString("choreId"))
+        }
+        val log = Data.readArray(ctx, LOG)
+
         val weekStart = weekStartStr()
         val (stars, spent, adjustments) = weekTotals(ctx, chores, done, weekStart)
         val prevStart = LocalDate.parse(weekStart).minusDays(7).toString()
@@ -130,6 +155,11 @@ object Chores {
         return JSONObject()
             .put("chores", chores)
             .put("doneToday", doneToday)
+            .put("pendingToday", pendingToday)
+            .put("approvalMode", ConfigStore(ctx).approvalMode())
+            .put("approvalLog", JSONArray().also { out ->
+                for (i in maxOf(0, log.length() - 50) until log.length()) out.put(log.get(i))
+            })
             .put("stars", stars)
             .put("goals", goals)
             .put("adjustments", adjustments)
@@ -400,8 +430,8 @@ object Chores {
                 } ?: throw IllegalArgumentException("that chore no longer exists")
                 val memberId = chore.optString("memberId")
                 val points = chore.optInt("points", 1)
+                var removed = false
                 Data.mutate(ctx, DONE) { done ->
-                    var removed = false
                     for (i in done.length() - 1 downTo 0) {
                         val d = done.getJSONObject(i)
                         if (d.optString("choreId") == id && d.optString("date") == today) {
@@ -413,6 +443,42 @@ object Chores {
                         .put("points", points))
                     prune(done)
                 }
+                if (!removed) logApproval(ctx, chore)
+            }
+            "request" -> {
+                val id = action.getString("choreId")
+                val today = dayFmt().format(Date())
+                val chore = findChore(ctx, id)
+                val already = Data.readArray(ctx, DONE).let { d ->
+                    (0 until d.length()).any { d.getJSONObject(it).let { o -> o.optString("choreId") == id && o.optString("date") == today } }
+                }
+                if (!already) Data.mutate(ctx, PENDING) { arr ->
+                    for (i in arr.length() - 1 downTo 0) if (arr.getJSONObject(i).optString("date") != today) arr.remove(i)
+                    val dup = (0 until arr.length()).any { arr.getJSONObject(it).optString("choreId") == id }
+                    if (!dup) arr.put(JSONObject().put("choreId", id).put("date", today))
+                }
+            }
+            "approve", "deny" -> {
+                val id = action.getString("choreId")
+                val today = dayFmt().format(Date())
+                val approve = action.getString("action") == "approve"
+                val chore = findChore(ctx, id)
+                var wasPending = false
+                Data.mutate(ctx, PENDING) { arr ->
+                    for (i in arr.length() - 1 downTo 0) arr.getJSONObject(i).let {
+                        if (it.optString("choreId") == id) { arr.remove(i); wasPending = true }
+                    }
+                }
+                if (approve && wasPending) {
+                    val memberId = chore.optString("memberId")
+                    Data.mutate(ctx, DONE) { done ->
+                        val has = (0 until done.length()).any { done.getJSONObject(it).let { d -> d.optString("choreId") == id && d.optString("date") == today } }
+                        if (!has) done.put(JSONObject().put("choreId", id).put("date", today)
+                            .put("memberId", memberId).put("points", chore.optInt("points", 1)))
+                        prune(done)
+                    }
+                }
+                if (wasPending && approve) logApproval(ctx, chore)
             }
             "adjust" -> {
                 val mid = action.getString("memberId")

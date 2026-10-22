@@ -78,6 +78,8 @@ class ChoresTab(
         val status = JSONObject(Chores.statusJson(ctx, includePins = true))
         val chores = status.getJSONArray("chores")
         val doneToday = toSet(status.getJSONArray("doneToday"))
+        val pendingToday = toSet(status.getJSONArray("pendingToday"))
+        val queueMode = status.optString("approvalMode") == "queue"
         val stars = status.getJSONObject("stars")
         val goals = status.getJSONObject("goals")
         val members = status.getJSONArray("members")
@@ -178,10 +180,12 @@ class ChoresTab(
             }
             for (c in list.sortedBy { doneToday.contains(it.optString("id")) }) {
                 val done = doneToday.contains(c.optString("id"))
+                val pending = !done && queueMode && pendingToday.contains(c.optString("id"))
                 val card = LinearLayout(ctx).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                     background = if (done) rounded(color, Palette.R_ELEMENT)
+                                 else if (pending) roundedStroke(mix(color, Color.WHITE, 0.8f), Palette.R_ELEMENT, dp(2), color)
                                  else roundedStroke(BG_SOFT, Palette.R_ELEMENT, dp(2), mix(color, Color.WHITE, 0.55f))
                     setPadding(dp(14), dp(13), dp(14), dp(13))
                 }
@@ -204,7 +208,7 @@ class ChoresTab(
                     setPadding(0, 0, dp(8), 0)
                 })
                 card.addView(TextView(ctx).apply {
-                    text = if (done) "✓" else ""
+                    text = if (done) "✓" else if (pending) "⏳" else ""
                     textSize = 22f
                     setTextColor(Color.WHITE)
                     typeface = Typeface.DEFAULT_BOLD
@@ -217,16 +221,20 @@ class ChoresTab(
                     // Quick bounce, then toggle — behind the kid's own PIN if set.
                     card.animate().scaleX(0.93f).scaleY(0.93f).setDuration(80).withEndAction {
                         card.animate().scaleX(1f).scaleY(1f).setDuration(80).start()
-                        onGate(member?.optString("pin") ?: "", name) {
+                        // Queue mode: a kid's tap only asks; a parent's PIN approves or un-checks.
+                        val request = queueMode && !done && !pending
+                        val act = if (pending) "approve" else if (request) "request" else "toggle"
+                        val run = {
                             val ok = runCatching {
                                 Chores.mutate(ctx, JSONObject()
-                                    .put("action", "toggle").put("choreId", c.optString("id")))
+                                    .put("action", act).put("choreId", c.optString("id")))
                             }.isSuccess
                             // Celebrate only when checking ON, and flag the moment
                             // this star reaches the weekly goal for a bigger burst.
-                            if (ok && !done)
+                            if (ok && !done && !request)
                                 onCelebrate(card, starCount < goal && starCount + 1 >= goal)
                         }
+                        if (request) run() else onGate(member?.optString("pin") ?: "", name, run)
                     }.start()
                 }
                 cardsBox.addView(card, lp(bottom = dp(10)))
