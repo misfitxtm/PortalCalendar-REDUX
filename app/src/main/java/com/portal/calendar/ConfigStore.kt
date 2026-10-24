@@ -13,6 +13,10 @@ data class FeedConfig(
     /** "calendar" renders on the board; "inbox" = every event is a command. */
     val kind: String = "calendar")
 
+/** A new random sign-in token: 32 bytes as 64 hex characters. */
+internal fun newServerToken(): String =
+    ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
+
 val CELEBRATE_KINDS = setOf("potty", "routines", "penalty")
 
 /** Feed list persisted as a JSON array in SharedPreferences. */
@@ -188,10 +192,10 @@ class ConfigStore(ctx: Context) {
 
     /** Secret the phone presents to the config server; created once, never exported. */
     @Synchronized
-    fun serverToken(): String = prefs.getString("server_token", null) ?: run {
-        val bytes = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
-        bytes.joinToString("") { "%02x".format(it) }.also { prefs.edit().putString("server_token", it).commit() }
-    }
+    fun serverToken(): String = prefs.getString("server_token", null) ?: resetServerToken()
+
+    /** Replaces the token, which signs out every browser and phone that used the old one. */
+    fun resetServerToken(): String = newServerToken().also { prefs.edit().putString("server_token", it).commit() }
 
     /** Kid-lock PIN; empty = lock disabled. Gates edits on the board only. */
     fun pin(): String = prefs.getString("kid_pin", "") ?: ""

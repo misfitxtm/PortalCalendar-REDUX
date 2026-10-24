@@ -2520,6 +2520,23 @@ class BoardController(private val baseCtx: Context) {
             }
         })
         card.addView(dangerRow, lpMatchWrap(top = dp(8)))
+        // Own row, like the one above: a third button there would crush the text.
+        val signOutRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        signOutRow.addView(navButton("🔒 Sign out all devices…") {
+            confirm("Sign out every phone and computer?",
+                "Every browser signed in to the setup page is signed out at once, and the old QR code and link stop working. A Portal paired with this one as its hub needs the new pairing code. Nothing is erased.",
+                "Sign out all") {
+                try {
+                    App.instance.resetServerToken()
+                    updateEmptyState() // a first-run QR on screen must show the new link
+                    statusLine = "Signed out every device"
+                } catch (e: Exception) {
+                    statusLine = "Couldn't sign devices out: ${e.message}"
+                }
+                renderAll()
+            }
+        })
+        card.addView(signOutRow, lpMatchWrap(top = dp(8)))
 
         val buttons = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
         buttons.addView(navButton("Sync now") {

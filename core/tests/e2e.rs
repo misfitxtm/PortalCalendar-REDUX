@@ -62,6 +62,23 @@ fn qr_link_sets_cookie_then_api_works() {
 }
 
 #[test]
+fn a_new_token_signs_out_every_old_cookie_on_the_live_server() {
+    let (s, p) = start();
+    let call = |cookie: &str| http(p, &format!("GET /api/export HTTP/1.1\r\nHost: 127.0.0.1:{p}\r\nCookie: pt={cookie}"), "");
+    let fresh = "fedcba9876543210fedcba9876543210";
+    assert!(call(T).starts_with("HTTP/1.1 200"));
+    s.set_token(fresh).unwrap();
+    assert!(call(T).starts_with("HTTP/1.1 401"), "old cookie must stop working");
+    assert!(call(fresh).starts_with("HTTP/1.1 200"));
+    // the sign-in link now sets the new token as the cookie, never the old one
+    let qr = http(p, &format!("GET /?t={fresh} HTTP/1.1\r\nHost: 127.0.0.1:{p}"), "");
+    assert!(qr.contains(&format!("pt={fresh};")) && !qr.contains(&format!("pt={T}")), "{qr}");
+    assert!(s.set_token("short").is_err());
+    assert!(call(fresh).starts_with("HTTP/1.1 200"), "a refused swap keeps the current token");
+    s.stop();
+}
+
+#[test]
 fn rebinding_host_is_403() {
     let (s, p) = start();
     let r = http(p, &format!("GET / HTTP/1.1\r\nHost: evil.example.com:{p}\r\nCookie: pt={T}"), "");

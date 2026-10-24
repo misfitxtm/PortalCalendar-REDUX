@@ -1,5 +1,6 @@
 //! Runs before any route handler sees a request. Pure, so it is unit-testable off-device.
 use std::net::IpAddr;
+use std::sync::RwLock;
 use subtle::ConstantTimeEq;
 
 pub struct Req<'a> {
@@ -21,7 +22,7 @@ pub enum Verdict {
 }
 
 pub struct Gate {
-    token: String,
+    token: RwLock<String>,
 }
 
 impl Gate {
@@ -30,11 +31,20 @@ impl Gate {
         if token.len() < 32 {
             return Err("token must be at least 32 chars");
         }
-        Ok(Self { token: token.to_owned() })
+        Ok(Self { token: RwLock::new(token.to_owned()) })
     }
 
-    pub fn token(&self) -> &str {
-        &self.token
+    pub fn token(&self) -> String {
+        self.token.read().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+
+    /// Swaps the token at once: every cookie and QR link made from the old one stops working.
+    pub fn set_token(&self, token: &str) -> Result<(), &'static str> {
+        if token.len() < 32 {
+            return Err("token must be at least 32 chars");
+        }
+        *self.token.write().unwrap_or_else(|p| p.into_inner()) = token.to_owned();
+        Ok(())
     }
 
     pub fn check(&self, r: &Req) -> Verdict {
@@ -76,7 +86,8 @@ impl Gate {
     }
 
     fn eq(&self, t: &str) -> bool {
-        self.token.as_bytes().ct_eq(t.as_bytes()).into()
+        let current = self.token.read().unwrap_or_else(|p| p.into_inner());
+        current.as_bytes().ct_eq(t.as_bytes()).into()
     }
 }
 
@@ -123,6 +134,30 @@ mod tests {
     fn bearer_allowed() {
         let r = Req { cookie: None, authorization: Some("Bearer 0123456789abcdef0123456789abcdef"), ..req() };
         assert_eq!(gate().check(&r), Verdict::Allow);
+    }
+
+    #[test]
+    fn a_new_token_signs_out_the_old_one() {
+        let g = gate();
+        let fresh = "fedcba9876543210fedcba9876543210";
+        assert_eq!(g.check(&req()), Verdict::Allow);
+        g.set_token(fresh).unwrap();
+        // the old cookie, the old bearer token and the old QR link all stop working
+        assert_eq!(g.check(&req()), Verdict::Reject(401, "unauthorized"));
+        let old_qr = Req { path: "/", query: "t=0123456789abcdef0123456789abcdef", cookie: None, ..req() };
+        assert_eq!(g.check(&old_qr), Verdict::Reject(401, "unauthorized"));
+        let new_cookie = Req { cookie: Some("pt=fedcba9876543210fedcba9876543210"), ..req() };
+        assert_eq!(g.check(&new_cookie), Verdict::Allow);
+        let new_qr = Req { path: "/", query: "t=fedcba9876543210fedcba9876543210", cookie: None, ..req() };
+        assert_eq!(g.check(&new_qr), Verdict::Bootstrap);
+        assert_eq!(g.token(), fresh);
+    }
+
+    #[test]
+    fn a_short_replacement_is_refused_and_the_old_token_stays() {
+        let g = gate();
+        assert!(g.set_token("short").is_err());
+        assert_eq!(g.check(&req()), Verdict::Allow);
     }
 
     #[test]

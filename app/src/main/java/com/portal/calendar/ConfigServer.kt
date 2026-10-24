@@ -122,6 +122,12 @@ class ConfigServer(
             else resp(401, "application/json", "{\"error\":\"wrong or expired code. Get a new one if this keeps happening.\"}")
         s.uri == "/api/pair/new" && s.method == Method.POST ->
             json(org.json.JSONObject().put("code", PairingCode.issue()).put("seconds", PairingCode.LIFETIME_MS / 1000).toString())
+        // Signs out every browser and phone, this caller included: its cookie stops working as soon as this returns.
+        s.uri == "/api/token/reset" && s.method == Method.POST -> {
+            if (org.json.JSONObject(readBody(s)).optString("confirm") != "SIGN_OUT") throw IllegalArgumentException("confirmation missing")
+            App.instance.resetServerToken()
+            json("{\"ok\":true}")
+        }
         // Opened by the shopping-list QR. The gate lets /dl/ through, so the short-lived code is the only check here.
         s.uri == "/dl/shopping-list.md" && s.method == Method.GET ->
             if (!DownloadLink.valid(s.param("c"))) resp(401, "text/plain", "this link has expired — scan the QR code again")

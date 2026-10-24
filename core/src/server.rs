@@ -46,6 +46,7 @@ pub trait Handler: Send + Sync + 'static {
 
 pub struct Server {
     inner: Arc<tiny_http::Server>,
+    gate: Arc<Gate>,
     stop: Arc<AtomicBool>,
     workers: Vec<JoinHandle<()>>,
 }
@@ -70,7 +71,12 @@ impl Server {
                 })
             })
             .collect();
-        Ok(Self { inner, stop, workers })
+        Ok(Self { inner, gate, stop, workers })
+    }
+
+    /// Signs everyone out: the new token replaces the old one for every later request.
+    pub fn set_token(&self, token: &str) -> Result<(), &'static str> {
+        self.gate.set_token(token)
     }
 
     pub fn port(&self) -> u16 {

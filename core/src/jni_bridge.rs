@@ -2,7 +2,7 @@
 //! Only reachable on-device; the logic worth testing lives in gate.rs / server.rs.
 use crate::server::{Handler, Response, Server};
 use jni::objects::{GlobalRef, JByteArray, JClass, JObject, JString, JValue};
-use jni::sys::{jlong, jstring};
+use jni::sys::{jboolean, jlong, jstring};
 use jni::{JNIEnv, JavaVM};
 use std::sync::Arc;
 
@@ -78,6 +78,18 @@ pub extern "system" fn Java_com_portal_calendar_PortalCore_start(
             0
         }
     }
+}
+
+/// Swaps the sign-in token on a running server; false if it was refused (too short) or `handle` is 0.
+#[no_mangle]
+pub extern "system" fn Java_com_portal_calendar_PortalCore_setToken(mut env: JNIEnv, _class: JClass, handle: jlong, token: JString) -> jboolean {
+    if handle == 0 {
+        return 0;
+    }
+    let Ok(token) = env.get_string(&token).map(String::from) else { return 0 };
+    // SAFETY: handle came from `start`, and the app never passes it to `stop` while it runs.
+    let server = unsafe { &*(handle as *const Server) };
+    server.set_token(&token).is_ok() as jboolean
 }
 
 /// Parses an .ics feed to JSON (see `ics::Parsed::to_json`). Never unwinds into the JVM.

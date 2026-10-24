@@ -32,6 +32,9 @@ class App : Application() {
     private val main = Handler(Looper.getMainLooper())
     private val configListeners = CopyOnWriteArraySet<() -> Unit>()
 
+    /** The running setup-page server, kept so its sign-in token can be replaced. 0 if it failed to start. */
+    @Volatile private var coreHandle = 0L
+
     /** The board currently on screen, if any — used for live scale preview. */
     var activeBoard: BoardController? = null
 
@@ -51,8 +54,8 @@ class App : Application() {
         runCatching { Chores.fixIcons(this) }
         sync = SyncManager(this, store)
         try {
-            // Handle ignored: the server lives as long as the process.
-            PortalCore.start("0.0.0.0:${ConfigServer.PORT}", store.serverToken(),
+            // The server lives as long as the process; the handle is only used to swap its token.
+            coreHandle = PortalCore.start("0.0.0.0:${ConfigServer.PORT}", store.serverToken(),
                 ConfigServer(this, store) { notifyConfigChanged() })
         } catch (_: Exception) {
             // Port busy (stale process) — the page just won't load until relaunch.
@@ -68,6 +71,12 @@ class App : Application() {
         })
         if (Screensaver.isEnabled(this)) KeepAliveService.start(this)
         FamilySync.applyRole(this) // hub advertises / spoke discovers + polls
+    }
+
+    /** Signs every phone and computer out: a new token replaces the old one on the store and on the running server. */
+    fun resetServerToken() {
+        val token = store.resetServerToken()
+        check(coreHandle == 0L || PortalCore.setToken(coreHandle, token)) { "the server refused the new token" }
     }
 
     /** A child earned the 7-dry-days bonus: the board congratulates them. */

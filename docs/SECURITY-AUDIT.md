@@ -1,7 +1,7 @@
 # Security audit — 2026-10-14
 
 Scope: the config server path, the manifest, secret storage, feed fetching, and the phone setup page.
-Method: code reading plus on-device curl checks. No fuzzing yet, and the Rust parser doesn't exist yet.
+Method: code reading plus on-device curl checks. At that point there was no fuzzing and the Rust parser did not exist yet; both came later (see the table below and the addendum).
 
 ## Fixed
 
@@ -32,8 +32,34 @@ Method: code reading plus on-device curl checks. No fuzzing yet, and the Rust pa
 | Low | Fuzzing is mutation-only (no coverage guidance) because this machine has no C++ compiler for libFuzzer | Run `cargo fuzz` after installing `gcc-c++` |
 | Low | The pairing code is the hub's full pairing token, so a paired Portal can do anything the hub's phone page can | A narrower per-Portal credential |
 | Low | `config.html` builds `onclick` strings from ids; a malicious imported backup could inject script | Use data attributes plus event delegation; validate ids on import |
-| Low | Rust server: no read timeouts or connection cap (slow-loris after auth) | Swap the HTTP layer if exposure grows |
-| Low | Token never rotates | "Reset token" button |
+| Low | Rust server: no read timeouts or connection cap. Tested 2026-10-24: 200 idle or half-sent connections, including unauthenticated `POST /pair` with an unsent body, did not slow a signed-in request (see the addendum) | Swap the HTTP layer if exposure grows |
 | Info | `usesCleartextTraffic` is on so plain-http feeds work | Keep, document |
 | Info | The parent PIN (Shopping tab, adjusting points, marking potty days) is enforced only in the board UI. Anyone with the phone page's login can do the same things, and the PIN is a 4-digit value stored in plain text. It is a family convenience, not a security boundary | Document; token pairing is the real control |
 | Info | Voice commands are off by default: no mic button, no recording, no model in memory until a parent enables them. The default engine is offline (audio never leaves the Portal). The optional Gemini engine sends audio to Google | By design; documented in the README |
+
+## Addendum — 2026-10-24
+
+Scope: what was added after the audit above, up to 4.0.0-redux.8: the pairing code (`POST /pair`, `POST /api/pair/new`), one-off download links (`GET /dl/shopping-list.md`), the chore approval PIN and queue (`/api/approval-pin`, `/api/chores`), and the sign-in token itself. Method: code reading, `cargo test` and `cargo deny check advisories` on `core/` (both clean), and local tests of the server code with a dummy handler. Not covered: `BoardController.kt`, `FamilySync`, `GoogleCal`, `CalDav`, `Gemini`, `BackupCrypto`, `Secrets`, the Gradle dependencies, and the app on a device.
+
+### Fixed
+
+| Finding | Fix |
+|---|---|
+| The sign-in token could not be revoked or rotated, and the pairing code hands it to computers as a one-year cookie, so a computer signed in once stayed signed in for good | **Sign out all devices** (Portal: Settings; setup page: Settings). It makes a new token, stores it and swaps it into the running Rust gate at once, so every old cookie, link and QR code stops working. Tests: gate unit tests, an end-to-end test on the live server, and a token-format test |
+
+### Checked and found sound
+
+| Route | Why |
+|---|---|
+| `POST /pair` (no sign-in) | The gate requires the same-origin check; the code is 6 digits, works once, lasts 5 minutes and is burned after 5 wrong tries, so one guess in about 200,000 per code; compared in constant time |
+| `GET /dl/shopping-list.md` (no sign-in) | Needs a 16-byte random code that lasts 10 minutes and opens only that one file; `..` is refused at the gate; the file name in the response comes from a safe-character check |
+| Chore approvals over the setup page | Refused: `toggle`, `request`, `approve` and `deny` only work on the Portal |
+| Stalled connections | Tested against the real server code: 4, 16, 64 and 200 stalled connections (body never sent, headers never finished, or silent) did not slow a legitimate request |
+
+### Open
+
+| Severity | Finding | Plan |
+|---|---|---|
+| Low | Anyone on the Wi-Fi can send 5 wrong codes to `/pair` and burn the current pairing code, so a parent has to ask for a new one | A per-address limit needs the client address passed from the Rust gate to the handler; not worth it yet |
+| Low | A Portal paired as a spoke keeps the hub's old token after "Sign out all devices" and needs the new pairing code | Documented in the confirmation text |
+| Low | Fuzzing is still mutation-only: libFuzzer needs a C++ compiler (`sudo dnf install gcc-c++`); `cargo-fuzz` and a nightly toolchain are installed | Run `cargo fuzz` once the compiler is installed |
